@@ -1,0 +1,294 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
+import com.qualcomm.robotcore.hardware.CRServo;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+@TeleOp (name="CombinedCode")
+public class CombinedCode extends LinearOpMode {
+    //Establish start time (not necessary)
+    private ElapsedTime runtime = new ElapsedTime();
+    //declare all motors and servo's
+    private DcMotor LF = null;
+    private DcMotor LB = null;
+    private DcMotor RF = null;
+    private DcMotor RB = null;
+
+    private DcMotor LinearSlideHorizontal;
+    private DcMotor LinearSlideVertical;
+
+    private CRServo slurp;
+    private Servo bakje;
+    private Servo pols;
+
+    //declare and define all variables
+    boolean SlideIsOn = false;
+    boolean SlideIsReversed = false;
+    boolean aDown = false;
+    boolean yDown = false;
+    boolean xDown = false;
+    boolean yPressed = false;
+    boolean aPressed = false;
+    
+    boolean leftBumperWasPressed = false;
+    boolean rightBumperWasPressed = false;
+    double power = 1;
+
+@Override 
+public void runOpMode() {
+
+    //define all motors and servo's
+    LF  = hardwareMap.get(DcMotor.class, "LF");
+    LB  = hardwareMap.get(DcMotor.class, "LB");
+    RF = hardwareMap.get(DcMotor.class, "RF");
+    RB = hardwareMap.get(DcMotor.class, "RB");
+    
+    LinearSlideVertical = hardwareMap.get(DcMotor.class, "LinearSlideVertical");
+    LinearSlideHorizontal = hardwareMap.get(DcMotor.class, "LinearSlideHorizontal");
+    
+    slurp = hardwareMap.get(CRServo.class, "slurp");
+    pols = hardwareMap.get(Servo.class, "pols");
+    bakje = hardwareMap.get(Servo.class, "bakje");
+    
+    //initialize servo positions
+    pols.setPosition(0.8);
+    bakje.setPosition(0.3);
+
+    //initialize motor directions
+    LF.setDirection(DcMotor.Direction.FORWARD);
+    LB.setDirection(DcMotor.Direction.REVERSE);
+    RF.setDirection(DcMotor.Direction.FORWARD);
+    RB.setDirection(DcMotor.Direction.FORWARD);
+    
+    //set motor behavior to brake for smoother driving
+    LF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    LB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    RF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    RB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    
+    double leftFrontPower = 0;
+    double rightFrontPower = 0;
+    double leftBackPower   = 0;
+    double rightBackPower  = 0;
+
+    // change telemetry status to initialized
+    telemetry.addData("Status", "Initialized");
+    telemetry.update();
+
+    waitForStart();
+    runtime.reset();
+
+    // run until the end of the match
+    while (opModeIsActive()) {
+
+        // declare and define variable each runtime tick
+        double axial   = -gamepad1.left_stick_y;  // Note: pushing stick forward gives negative value
+        double lateral =  gamepad1.left_stick_x;
+        double yaw     =  gamepad1.right_stick_x;
+
+        //declare, define variable -> calculate power for each wheel
+        if(gamepad1.right_bumper) {
+            leftFrontPower  = (axial + lateral + yaw)/3;
+            rightFrontPower = (axial - lateral - yaw)/3;
+            leftBackPower   = (axial - lateral + yaw)/3;
+            rightBackPower  = (axial + lateral - yaw)/3;
+        }else{
+            leftFrontPower  = (axial + lateral + yaw);
+            rightFrontPower = (axial - lateral - yaw);
+            leftBackPower   = (axial - lateral + yaw);
+            rightBackPower  = (axial + lateral - yaw);
+        }
+
+        // change power per wheel based on previous calculated variable
+        LF.setPower(leftFrontPower);
+        RF.setPower(rightFrontPower);
+        LB.setPower(leftBackPower);
+        RB.setPower(rightBackPower);
+        
+        /* ---LinearSlideHorizontal--- //
+        *     first checks if one of the buttons for the slider is pressed
+        *     then checks wich button is pressed and changes direction respectively
+        *     then turns on the motor
+        *     when both buttons aren't placed the motor turns off
+        */
+        if(gamepad2.a || gamepad2.b) {
+            if(gamepad2.a) {
+                LinearSlideHorizontal.setDirection(DcMotor.Direction.FORWARD);
+            }
+            if(gamepad2.b) {
+                LinearSlideHorizontal.setDirection(DcMotor.Direction.REVERSE);
+            }
+            LinearSlideHorizontal.setPower(1);
+        }else{
+            LinearSlideHorizontal.setPower(0);
+        }
+    
+        /* ---LinearSlideVertical--- //
+        *     first checks if one of the buttons for the slider is pressed
+        *     then checks wich button is pressed and changes direction respectively
+        *     it turns the motor on if it wasn't already on
+        *     or it turns the motor off if it was on
+        */
+        
+        // if(gamepad1.a || gamepad1.y) {
+        //     if(gamepad1.a && !aDown) {
+        //         aDown = true;
+        //         yDown = false;
+        //     }else if(gamepad1.a && aDown) {
+        //         aDown = false;
+        //         yDown = false;
+        //     }
+        //     if(gamepad1.y && !yDown) {
+        //         yDown = true;
+                
+        //     }
+        // }
+        // if(gamepad1.a && !aDown) {
+        //     LinearSlideVertical.setDirection(DcMotor.Direction.FORWARD);
+        //     aDown = true;
+        //     yDown = false;
+        // }else if (gamepad1.a && aDown) {
+        //     aDown = false;
+        //     yDown = false;
+        // }
+        
+        // if(gamepad1.y && !yDown) {
+        //     LinearSlideVertical.setDirection(DcMotor.Direction.REVERSE);
+        //     yDown = true;
+        //     aDown = false;
+        // }else if (gamepad1.a && yDown) {
+        //     yDown = false;
+        //     aDown = false;
+        // }
+        
+        // if(yDown || aDown) {
+        //     LinearSlideVertical.setPower(1);
+        // }else{
+        //     LinearSlideVertical.setPower(0);
+        // }
+        if(gamepad1.left_trigger > 0) {
+            power = 0.3;
+        }else{
+            power = 1;
+        }
+        
+        if(gamepad1.a && !aDown) {
+      aDown = true;
+      bakje.setPosition(0.43);
+      pols.setPosition(0.65);
+      if(!SlideIsReversed) {
+        SlideIsReversed = true;
+        LinearSlideVertical.setDirection(DcMotor.Direction.REVERSE);
+        LinearSlideVertical.setPower(1);
+      }else{
+        SlideIsReversed = false;
+        LinearSlideVertical.setPower(0);
+      }
+    }else if (!gamepad1.a){
+      aDown = false;
+    }
+    
+    if(gamepad1.y && !yDown) {
+      yDown = true;
+      if(!SlideIsOn) {
+        SlideIsOn = true;
+        LinearSlideVertical.setDirection(DcMotor.Direction.FORWARD);
+        LinearSlideVertical.setPower(power);
+      } else {
+        SlideIsOn = false;
+        LinearSlideVertical.setPower(0);
+      }
+    }else if (!gamepad1.y){
+      yDown = false;
+    }
+
+
+// if (gamepad1.x && !xDown) {
+//     xDown = true;
+//     LinearSlideVertical.setPower(0.25); // 1/4 power upwards
+// } else if (!gamepad1.x) {
+//     xDown = false;
+//     LinearSlideVertical.setPower(0); // Stop when X button is released
+// }
+
+// if(gamepad1.y && !yDown) {
+//       yDown = true;
+//       if(!SlideIsOn) {
+//         SlideIsOn = true;
+//         LinearSlideVertical.setDirection(DcMotor.Direction.FORWARD);
+//         LinearSlideVertical.setPower(5);
+//       } else {
+//         SlideIsOn = false;
+//         LinearSlideVertical.setPower(0);
+//       }
+//     }else if (!gamepad1.y){
+//       yDown = false;
+//     }
+    
+    
+//     if(gamepad1.a && !aDown) {
+//       aDown = true;
+//       if(!SlideIsReversed) {
+//         SlideIsReversed = true;
+//         LinearSlideVertical.setDirection(DcMotor.Direction.REVERSE);
+//         LinearSlideVertical.setPower(1);
+//       }else{
+//         SlideIsReversed = false;
+//         LinearSlideVertical.setPower(0);
+//       }
+//     }else if (!gamepad1.a){
+//       aDown = false;
+//     }
+
+        
+    
+        // Variables to track the previous bumper states
+
+
+if (gamepad2.left_bumper && !leftBumperWasPressed && !gamepad2.right_bumper) {
+    slurp.setPower(0.9);
+    leftBumperWasPressed = true;  // Set to true when left bumper is pressed
+} else if (!gamepad2.left_bumper && leftBumperWasPressed) {
+    slurp.setPower(0);  // Reset power when left bumper is released
+    leftBumperWasPressed = false;  // Reset bumper state
+}
+
+
+if (gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumper) {
+    slurp.setPower(-0.9);
+    pols.setPosition(0.45); 
+    rightBumperWasPressed = true;  // Set to true when right bumper is pressed
+} else if ((!(gamepad2.right_trigger > 0) && rightBumperWasPressed)) {
+    slurp.setPower(0);  // Reset power when right bumper is released
+    rightBumperWasPressed = false;  // Reset bumper state
+}
+
+    
+        if(gamepad2.dpad_down) { bakje.setPosition(0.62); }
+        if(gamepad2.dpad_up) { bakje.setPosition(0.43); }
+        
+        // if(gamepad2.right_trigger > 0) { 
+        //     pols.setPosition(0.45); 
+        //     slurp.setPower(-0.9);
+        // }else if (!gamepad2.right_bumper && rightBumperWasPressed){
+        //     slurp.setPower(0);
+        // } //down
+        if(gamepad2.left_trigger > 0) { pols.setPosition(0.90); } // up
+        // servo pols laag 0.45, servo pols hoog 0.90
+        // bakje laag 0.62, bakje hoog 0.43
+        
+        if(gamepad2.x) {
+            pols.setPosition(0.65);
+        }
+
+        // Show the elapsed game time and wheel power.
+        telemetry.addData("Status", "Run Time: " + runtime.toString());
+        telemetry.addData("Front left/Right", "%4.2f, %4.2f", leftFrontPower, rightFrontPower);
+        telemetry.addData("Back  left/Right", "%4.2f, %4.2f", leftBackPower, rightBackPower);
+        telemetry.update();
+    }
+}}
