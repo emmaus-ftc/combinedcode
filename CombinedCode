@@ -54,9 +54,9 @@ public void runOpMode() {
     pols = hardwareMap.get(Servo.class, "pols");
     bakje = hardwareMap.get(Servo.class, "bakje");
     
-    //initialize servo positions
-    pols.setPosition(0.8);
-    bakje.setPosition(0.3);
+    // //initialize servo positions
+    // pols.setPosition(0.8);
+    // bakje.setPosition(0.37);
 
     //initialize motor directions
     LF.setDirection(DcMotor.Direction.FORWARD);
@@ -74,6 +74,7 @@ public void runOpMode() {
     double rightFrontPower = 0;
     double leftBackPower   = 0;
     double rightBackPower  = 0;
+    double driveSpeedMultiplier = 0.75;
 
     // change telemetry status to initialized
     telemetry.addData("Status", "Initialized");
@@ -92,15 +93,15 @@ public void runOpMode() {
 
         //declare, define variable -> calculate power for each wheel
         if(gamepad1.right_bumper) {
-            leftFrontPower  = (axial + lateral + yaw)/3;
-            rightFrontPower = (axial - lateral - yaw)/3;
-            leftBackPower   = (axial - lateral + yaw)/3;
-            rightBackPower  = (axial + lateral - yaw)/3;
+            leftFrontPower  = (axial + lateral + yaw) * driveSpeedMultiplier/4;
+            rightFrontPower = (axial - lateral - yaw) * driveSpeedMultiplier/4;
+            leftBackPower   = (axial - lateral + yaw) * driveSpeedMultiplier/4;
+            rightBackPower  = (axial + lateral - yaw) * driveSpeedMultiplier/4;
         }else{
-            leftFrontPower  = (axial + lateral + yaw);
-            rightFrontPower = (axial - lateral - yaw);
-            leftBackPower   = (axial - lateral + yaw);
-            rightBackPower  = (axial + lateral - yaw);
+            leftFrontPower  = (axial + lateral + yaw) * driveSpeedMultiplier;
+            rightFrontPower = (axial - lateral - yaw) * driveSpeedMultiplier;
+            leftBackPower   = (axial - lateral + yaw) * driveSpeedMultiplier;
+            rightBackPower  = (axial + lateral - yaw) * driveSpeedMultiplier;
         }
 
         // change power per wheel based on previous calculated variable
@@ -178,8 +179,8 @@ public void runOpMode() {
         
         if(gamepad1.a && !aDown) {
       aDown = true;
-      bakje.setPosition(0.43);
-      pols.setPosition(0.65);
+      bakje.setPosition(0.40);
+    //   pols.setPosition(0.72);
       if(!SlideIsReversed) {
         SlideIsReversed = true;
         LinearSlideVertical.setDirection(DcMotor.Direction.REVERSE);
@@ -194,6 +195,7 @@ public void runOpMode() {
     
     if(gamepad1.y && !yDown) {
       yDown = true;
+    //   pols.setPosition(0.72);
       if(!SlideIsOn) {
         SlideIsOn = true;
         LinearSlideVertical.setDirection(DcMotor.Direction.FORWARD);
@@ -250,7 +252,7 @@ public void runOpMode() {
 
 
 if (gamepad2.left_bumper && !leftBumperWasPressed && !gamepad2.right_bumper) {
-    slurp.setPower(0.9);
+    slurp.setPower(-0.9);
     leftBumperWasPressed = true;  // Set to true when left bumper is pressed
 } else if (!gamepad2.left_bumper && leftBumperWasPressed) {
     slurp.setPower(0);  // Reset power when left bumper is released
@@ -258,9 +260,11 @@ if (gamepad2.left_bumper && !leftBumperWasPressed && !gamepad2.right_bumper) {
 }
 
 
-if (gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumper) {
-    slurp.setPower(-0.9);
-    pols.setPosition(0.45); 
+if (((gamepad2.right_trigger > 0) || gamepad2.right_bumper) && !rightBumperWasPressed && !gamepad2.left_bumper) {
+    if(gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumper) {
+        pols.setPosition(0.45); 
+    }
+    slurp.setPower(0.9);
     rightBumperWasPressed = true;  // Set to true when right bumper is pressed
 } else if ((!(gamepad2.right_trigger > 0) && rightBumperWasPressed)) {
     slurp.setPower(0);  // Reset power when right bumper is released
@@ -268,8 +272,8 @@ if (gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumpe
 }
 
     
-        if(gamepad2.dpad_down) { bakje.setPosition(0.62); }
-        if(gamepad2.dpad_up) { bakje.setPosition(0.43); }
+        if(gamepad2.dpad_down) { bakje.setPosition(0.65); }
+        if(gamepad2.dpad_up) { bakje.setPosition(0.37); }
         
         // if(gamepad2.right_trigger > 0) { 
         //     pols.setPosition(0.45); 
@@ -277,12 +281,12 @@ if (gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumpe
         // }else if (!gamepad2.right_bumper && rightBumperWasPressed){
         //     slurp.setPower(0);
         // } //down
-        if(gamepad2.left_trigger > 0) { pols.setPosition(0.90); } // up
+        if(gamepad2.left_trigger > 0) { pols.setPosition(0.96); } // up
         // servo pols laag 0.45, servo pols hoog 0.90
         // bakje laag 0.62, bakje hoog 0.43
         
         if(gamepad2.x) {
-            pols.setPosition(0.65);
+            pols.setPosition(0.72);
         }
 
         // Show the elapsed game time and wheel power.
