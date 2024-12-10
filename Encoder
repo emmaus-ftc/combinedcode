@@ -1,0 +1,90 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.hardware.DcMotor;
+
+@TeleOp
+public class OmnidriveEnc extends LinearOpMode{
+    
+    private ElapsedTime runtime = new ElapsedTime();
+    
+    // Declare all motors and servos
+    private DcMotor LF = null;
+    private DcMotor LB = null;
+    private DcMotor RF = null;
+    private DcMotor RB = null;
+    
+    double speedChangePerLoop = 0.06;
+    double maxPower = 0.7;
+    float LFPower = 0;
+    float LBPower = 0;
+    float RFPower = 0;
+    float RBPower = 0;
+    
+    float LFTargetRotation = 0;
+    float LBTargetRotation = 0;
+    float RFTargetRotation = 0;
+    float RBTargetRotation = 0;
+    
+    private DcMotor CascadeLift;
+    
+    @Override 
+    public void runOpMode() {
+        
+        // Hardware mapping
+        LF  = hardwareMap.get(DcMotor.class, "LF");
+        LB  = hardwareMap.get(DcMotor.class, "LB");
+        RF = hardwareMap.get(DcMotor.class, "RF");
+        RB = hardwareMap.get(DcMotor.class, "RB");
+        CascadeLift = hardwareMap.get(DcMotor.class, "CascadeLift");
+        
+        // Reset encoders for all motors
+        LF.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        LB.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        RF.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        RB.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        CascadeLift.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        
+        // Set the mode for all motors to RUN_TO_POSITION
+        LF.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        LB.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        RF.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        RB.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        CascadeLift.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        
+        waitForStart();
+        
+        // Main loop to control robot behavior
+        while (opModeIsActive()) {
+            
+            // Control CascadeLift with the Y button (move to target position)
+            if (gamepad1.y) {
+                CascadeLift.setTargetPosition(4000);  // Set the target position for lift
+                //2500 is closest, 2000 is used for debugging
+                CascadeLift.setMode(DcMotor.RunMode.RUN_TO_POSITION);  // Move to target position
+                CascadeLift.setPower(0.5);  // Set motor power to move towards target
+            }
+            
+            // Control CascadeLift with the A button (move to home position)
+            if (gamepad1.a) {
+                CascadeLift.setTargetPosition(0);  // Home position
+                CascadeLift.setMode(DcMotor.RunMode.RUN_TO_POSITION);  // Move to target position
+                CascadeLift.setPower(0.5);  // Set motor power to move towards target
+            }
+            
+            // Stop CascadeLift when it reaches the target position
+            if (!CascadeLift.isBusy()) {
+                CascadeLift.setPower(0);  // Stop motor once target position is reached
+            }
+            
+            // Telemetry for debugging
+            telemetry.addData("CascadeLift Position", CascadeLift.getCurrentPosition());
+            telemetry.addData("CascadeLift Target", CascadeLift.getTargetPosition());
+            telemetry.update();
+        }
+    }
+    
+    
+}
