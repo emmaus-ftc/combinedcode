@@ -1,6 +1,8 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import com.qualcomm.robotcore.hardware.DistanceSensor;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
@@ -24,6 +26,8 @@ public class Encoder extends LinearOpMode{
     boolean rightBumperWasPressed = false;
     double power = 1;
     
+    private DistanceSensor dSensor;
+    
     @Override 
     public void runOpMode() {
         
@@ -32,6 +36,8 @@ public class Encoder extends LinearOpMode{
         bakje = hardwareMap.get(Servo.class, "bakje");
         pols = hardwareMap.get(Servo.class, "pols");
         slurp = hardwareMap.get(CRServo.class, "slurp");
+        
+        dSensor = hardwareMap.get(DistanceSensor.class, "dSensor");
 
         CascadeLift.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         bakje.setPosition(0.37);
@@ -94,10 +100,14 @@ public class Encoder extends LinearOpMode{
         if(gamepad2.left_trigger > 0) { pols.setPosition(0.96); } 
         
         if(gamepad2.x) { pols.setPosition(0.72); }
+        
+        double distance = dSensor.getDistance(DistanceUnit.CM);
+        if (distance > 5) { CascadeLift.setTargetPosition(0); }   
             
             // Telemetry for debugging
             telemetry.addData("CascadeLift Position", CascadeLift.getCurrentPosition());
             telemetry.addData("CascadeLift Target", CascadeLift.getTargetPosition());
+            telemetry.addData("Distance", distance);
             telemetry.update();
         }
     }
