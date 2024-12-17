@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -16,12 +17,21 @@ public class Encoder extends LinearOpMode{
     private DcMotor CascadeLift;
     
     private Servo bakje;
+    private Servo pols;
+    private CRServo slurp;
+    
+    boolean leftBumperWasPressed = false;
+    boolean rightBumperWasPressed = false;
+    double power = 1;
+    
     @Override 
     public void runOpMode() {
         
         
         CascadeLift = hardwareMap.get(DcMotor.class, "CascadeLift");
         bakje = hardwareMap.get(Servo.class, "bakje");
+        pols = hardwareMap.get(Servo.class, "pols");
+        slurp = hardwareMap.get(CRServo.class, "slurp");
 
         CascadeLift.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         bakje.setPosition(0.37);
@@ -36,7 +46,7 @@ public class Encoder extends LinearOpMode{
             
             // Control CascadeLift with the Y button (move to target position)
             if (gamepad1.y) {
-                CascadeLift.setTargetPosition(4450);  // Set the target position for lift
+                CascadeLift.setTargetPosition(-4450);  // Set the target position for lift
                 //2500 is closest, 2000 is used for debugging
                 CascadeLift.setMode(DcMotor.RunMode.RUN_TO_POSITION);  // Move to target position
                 CascadeLift.setPower(1);  // Set motor power to move towards target
@@ -54,13 +64,41 @@ public class Encoder extends LinearOpMode{
                 CascadeLift.setPower(0);  // Stop motor once target position is reached
             }
             
+            if(gamepad2.dpad_down) { bakje.setPosition(0.65); }
+            if(gamepad2.dpad_up) { bakje.setPosition(0.37); }
+        
+    
+        // Variables to track the previous bumper states
+
+
+    if (gamepad2.left_bumper && !leftBumperWasPressed && !gamepad2.right_bumper) {
+        slurp.setPower(-0.9);
+        leftBumperWasPressed = true;  // Set to true when left bumper is pressed
+    } else if (!gamepad2.left_bumper && leftBumperWasPressed) {
+        slurp.setPower(0);  // Reset power when left bumper is released
+        leftBumperWasPressed = false;  // Reset bumper state
+    }
+
+
+    if (((gamepad2.right_trigger > 0) || gamepad2.right_bumper) && !rightBumperWasPressed && !gamepad2.left_bumper) {
+        if(gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumper) {
+            pols.setPosition(0.45); 
+        }
+        slurp.setPower(0.9);
+        rightBumperWasPressed = true;  // Set to true when right bumper is pressed
+    } else if ((!(gamepad2.right_trigger > 0) && rightBumperWasPressed)) {
+        slurp.setPower(0);  // Reset power when right bumper is released
+        rightBumperWasPressed = false;  // Reset bumper state
+    }
+
+        if(gamepad2.left_trigger > 0) { pols.setPosition(0.96); } 
+        
+        if(gamepad2.x) { pols.setPosition(0.72); }
+            
             // Telemetry for debugging
             telemetry.addData("CascadeLift Position", CascadeLift.getCurrentPosition());
             telemetry.addData("CascadeLift Target", CascadeLift.getTargetPosition());
             telemetry.update();
-                    if(gamepad2.dpad_down) { bakje.setPosition(0.65); }
-        if(gamepad2.dpad_up) { bakje.setPosition(0.37); }
-
         }
     }
     
