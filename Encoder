@@ -26,7 +26,7 @@ public class Encoder extends LinearOpMode{
     boolean rightBumperWasPressed = false;
     double power = 1;
     
-    private DistanceSensor dSensor;
+   
     
     @Override 
     public void runOpMode() {
@@ -37,7 +37,7 @@ public class Encoder extends LinearOpMode{
         pols = hardwareMap.get(Servo.class, "pols");
         slurp = hardwareMap.get(CRServo.class, "slurp");
         
-        dSensor = hardwareMap.get(DistanceSensor.class, "dSensor");
+    
 
         CascadeLift.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         bakje.setPosition(0.37);
@@ -52,7 +52,7 @@ public class Encoder extends LinearOpMode{
             
             // Control CascadeLift with the Y button (move to target position)
             if (gamepad1.y) {
-                CascadeLift.setTargetPosition(-4450);  // Set the target position for lift
+                CascadeLift.setTargetPosition(-7300);  // Set the target position for lift
                 //2500 is closest, 2000 is used for debugging
                 CascadeLift.setMode(DcMotor.RunMode.RUN_TO_POSITION);  // Move to target position
                 CascadeLift.setPower(1);  // Set motor power to move towards target
@@ -70,8 +70,10 @@ public class Encoder extends LinearOpMode{
                 CascadeLift.setPower(0);  // Stop motor once target position is reached
             }
             
-            if(gamepad2.dpad_down) { bakje.setPosition(0.65); }
-            if(gamepad2.dpad_up) { bakje.setPosition(0.37); }
+            
+            
+            if(gamepad2.dpad_down) { bakje.setPosition(0.37); }
+            if(gamepad2.dpad_up) { bakje.setPosition(0.65); }
         
     
         // Variables to track the previous bumper states
@@ -88,7 +90,7 @@ public class Encoder extends LinearOpMode{
 
     if (((gamepad2.right_trigger > 0) || gamepad2.right_bumper) && !rightBumperWasPressed && !gamepad2.left_bumper) {
         if(gamepad2.right_trigger > 0 && !rightBumperWasPressed && !gamepad2.left_bumper) {
-            pols.setPosition(0.45); 
+            pols.setPosition(0.86); 
         }
         slurp.setPower(0.9);
         rightBumperWasPressed = true;  // Set to true when right bumper is pressed
@@ -97,17 +99,17 @@ public class Encoder extends LinearOpMode{
         rightBumperWasPressed = false;  // Reset bumper state
     }
 
-        if(gamepad2.left_trigger > 0) { pols.setPosition(0.96); } 
+        if(gamepad2.left_trigger > 0) { pols.setPosition(0.60); } 
         
-        if(gamepad2.x) { pols.setPosition(0.72); }
+        if(gamepad2.x) { pols.setPosition(0.78); }
         
-        double distance = dSensor.getDistance(DistanceUnit.CM);
-        if (distance > 5) { CascadeLift.setTargetPosition(0); }   
+        
+        
             
             // Telemetry for debugging
             telemetry.addData("CascadeLift Position", CascadeLift.getCurrentPosition());
             telemetry.addData("CascadeLift Target", CascadeLift.getTargetPosition());
-            telemetry.addData("Distance", distance);
+           
             telemetry.update();
         }
     }
