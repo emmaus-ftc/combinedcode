@@ -1,25 +1,24 @@
-
-        /*
-         * Copyright (c) 2019 OpenFTC Team
-         *
-         * Permission is hereby granted, free of charge, to any person obtaining a copy
-         * of this software and associated documentation files (the "Software"), to deal
-         * in the Software without restriction, including without limitation the rights
-         * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-         * * copies of the Software, and to permit persons to whom the Software is
-         * furnished to do so, subject to the following conditions:
-         * ik heb nu deze code voor het detecteren van een groene bal. mijn problemen zijn als volgt. ten eerste ziet de code nu alles wat groen is als een bal, maar ik wil dus alleen dat hij iets detecteert als het ook om een groene bal gaat, en niet een groen vierkant ofzo
-         * The above copyright notice and this permission notice shall be included in all
-         * copies or substantial portions of the Software.
-         * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-         * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-         * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-         * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-         * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-         * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-         * SOFTWARE.
-         */
-        package org.firstinspires.ftc.teamcode;
+/*
+ * Copyright (c) 2019 OpenFTC Team
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -45,238 +44,217 @@ import java.util.List;
 @TeleOp(name="Object Detection", group="Robot")
 public class ObjectDetection extends LinearOpMode
 {
-OpenCvWebcam webcam;
-
-@Override
-public void runOpMode()
-{
-    int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
-            "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
-
-    webcam = OpenCvCameraFactory.getInstance().createWebcam(
-            hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
-
-    GreenSphereDetectionPipeline colorDetectionPipeline = new GreenSphereDetectionPipeline(webcam);
-    webcam.setPipeline(colorDetectionPipeline);
-    webcam.setMillisecondsPermissionTimeout(5000);
-
-    webcam.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener()
-    {
-        @Override
-        public void onOpened()
-        {
-            webcam.startStreaming(320, 240, OpenCvCameraRotation.UPRIGHT);
-            telemetry.addData("Camera Status", "Stream gestart");
-            telemetry.update();
-        }
-
-        @Override
-        public void onError(int errorCode)
-        {
-            telemetry.addData("Camera Fout", "Code: " + errorCode);
-            telemetry.update();
-        }
-    });
-
-    telemetry.addLine("Waiting for start");
-    telemetry.update();
-
-    waitForStart();
-
-    while (opModeIsActive())
-    {
-        telemetry.addData("Frame Count", webcam.getFrameCount());
-        telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
-        telemetry.addData("Total frame time ms", webcam.getTotalFrameTimeMs());
-        telemetry.addData("Pipeline time ms", webcam.getPipelineTimeMs());
-        telemetry.addData("Overhead time ms", webcam.getOverheadTimeMs());
-        telemetry.addData("Theoretical max FPS", webcam.getCurrentPipelineMaxFps());
-
-        telemetry.addData("Afstand tot bal (cm)", String.format("%.2f", colorDetectionPipeline.getLastDistance()));
-        telemetry.addData("Aantal groene objecten", colorDetectionPipeline.getNumberOfGreenObjects());
-        telemetry.addData("Gemeten pixelDiameter", String.format("%.2f", colorDetectionPipeline.getLastPixelDiameter()));
-        telemetry.addData("Circularity", String.format("%.2f", colorDetectionPipeline.getCircularity()));
-
-        // Positiemelding van de bal
-        String positie = "Geen bal gedetecteerd";
-        if (colorDetectionPipeline.getNumberOfGreenObjects() > 0) {
-            if (colorDetectionPipeline.isBallCentered()) {
-                positie = "BAL IN MIDDEN";
-            } else if (colorDetectionPipeline.getLastCenter().x < 160) {
-                positie = "BAL LINKS";
-            } else {
-                positie = "BAL RECHTS";
-            }
-        }
-
-        telemetry.addData("Positie van bal", positie);
-        telemetry.update();
-
-        if(gamepad1.a)
-        {
-            webcam.stopStreaming();
-        }
-
-        sleep(100);
-    }
-
-    webcam.stopStreaming();
-    webcam.closeCameraDevice();
-}
-
-class GreenSphereDetectionPipeline extends OpenCvPipeline
-{
-    boolean viewPortPaused;
-
-    private static final int CAMERA_WIDTH = 320;
-    private static final int CAMERA_HEIGHT = 240;
-    private static final int CENTER_TOLERANCE = 20;
-
-    Mat hsv = new Mat();
-    Mat mask = new Mat();
-    Mat hierarchy = new Mat();
-
-    public Scalar lowerGreen = new Scalar(85, 180, 100);
-    public Scalar upperGreen = new Scalar(95, 255, 255);
-
-
-
-    private volatile int numberOfGreenObjects = 0;
-    private volatile double lastDistance = 0;
-    private volatile double lastPixelDiameter = 0;  // <-- nieuw
-    private volatile Point lastCenter = new Point(-1, -1);
-    private volatile boolean isCentered = false;
-    private volatile double circularityValue = 0;
-    private volatile double lastRadius = 0;
-
-    private OpenCvWebcam externalWebcam;
-
-    // ✅ Bal eigenschappen en kalibratie
-    private final double realDiameter = 12.70;   // cm
-    private final double focalLength = 354.3;    // berekend uit 30cm @ 150 pixels
-
-    public GreenSphereDetectionPipeline(OpenCvWebcam webcam)
-    {
-        this.externalWebcam = webcam;
-    }
-
-    public int getNumberOfGreenObjects() { return numberOfGreenObjects; }
-    public double getCircularity() { return circularityValue; }
-    public double getLastDistance() { return lastDistance; }
-    public double getLastPixelDiameter() { return lastPixelDiameter; }
-    public boolean isBallCentered() { return isCentered; }
-    public Point getLastCenter() { return lastCenter; }
-    public double getLastRadius() { return lastRadius; }
+    OpenCvWebcam webcam;
 
     @Override
-    public Mat processFrame(Mat input)
+    public void runOpMode()
     {
-        Imgproc.cvtColor(input, hsv, Imgproc.COLOR_RGB2HSV);
-        Core.inRange(hsv, lowerGreen, upperGreen, mask);
+        int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
+                "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
 
-        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE,
-                Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5,5)));
-        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_OPEN,
-                Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3,3)));
+        webcam = OpenCvCameraFactory.getInstance().createWebcam(
+                hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
 
-        List<MatOfPoint> contours = new ArrayList<>();
-        Imgproc.findContours(mask, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        GreenSphereDetectionPipeline colorDetectionPipeline = new GreenSphereDetectionPipeline(webcam);
+        webcam.setPipeline(colorDetectionPipeline);
+        webcam.setMillisecondsPermissionTimeout(5000);
 
-        numberOfGreenObjects = 0;
-        double maxRadius = 0;
-        Point bestCenter = new Point(-1, -1);
-
-        for (MatOfPoint contour : contours)
+        webcam.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener()
         {
-            double contourArea = Imgproc.contourArea(contour);
-            double perimeter = Imgproc.arcLength(new MatOfPoint2f(contour.toArray()), true);
-
-            if (perimeter == 0) continue;
-
-            double circularity = 4 * Math.PI * (contourArea / (perimeter * perimeter));
-            circularityValue = circularity;
-
-
-//                if (circularity < 0.7) {
-//                    continue; // skip non-circular objects
-//                }
-
-
-            if (contourArea > 100) // lager gezet voor kleinere objecten
+            @Override
+            public void onOpened()
             {
+                webcam.startStreaming(320, 240, OpenCvCameraRotation.UPRIGHT);
+                telemetry.addData("Camera Status", "Stream gestart");
+                telemetry.update();
+            }
 
+            @Override
+            public void onError(int errorCode)
+            {
+                telemetry.addData("Camera Fout", "Code: " + errorCode);
+                telemetry.update();
+            }
+        });
+
+        telemetry.addLine("Waiting for start");
+        telemetry.update();
+
+        waitForStart();
+
+        while (opModeIsActive())
+        {
+            telemetry.addData("Frame Count", webcam.getFrameCount());
+            telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
+            telemetry.addData("Total frame time ms", webcam.getTotalFrameTimeMs());
+            telemetry.addData("Pipeline time ms", webcam.getPipelineTimeMs());
+            telemetry.addData("Overhead time ms", webcam.getOverheadTimeMs());
+            telemetry.addData("Theoretical max FPS", webcam.getCurrentPipelineMaxFps());
+
+            telemetry.addData("Afstand tot bal (cm)", String.format("%.2f", colorDetectionPipeline.getLastDistance()));
+            telemetry.addData("Aantal groene objecten", colorDetectionPipeline.getNumberOfGreenObjects());
+            telemetry.addData("Gemeten pixelDiameter", String.format("%.2f", colorDetectionPipeline.getLastPixelDiameter()));
+            telemetry.addData("Circularity", String.format("%.2f", colorDetectionPipeline.getCircularity()));
+
+            String positie = "Geen bal gedetecteerd";
+            if (colorDetectionPipeline.getNumberOfGreenObjects() > 0) {
+                if (colorDetectionPipeline.isBallCentered()) {
+                    positie = "BAL IN MIDDEN";
+                } else if (colorDetectionPipeline.getLastCenter().x < 160) {
+                    positie = "BAL LINKS";
+                } else {
+                    positie = "BAL RECHTS";
+                }
+            }
+
+            telemetry.addData("Positie van bal", positie);
+            telemetry.update();
+
+            if(gamepad1.a)
+            {
+                webcam.stopStreaming();
+            }
+
+            sleep(100);
+        }
+
+        webcam.stopStreaming();
+        webcam.closeCameraDevice();
+    }
+
+    class GreenSphereDetectionPipeline extends OpenCvPipeline
+    {
+        boolean viewPortPaused;
+
+        private static final int CAMERA_WIDTH = 320;
+        private static final int CAMERA_HEIGHT = 240;
+        private static final int CENTER_TOLERANCE = 20;
+
+        Mat hsv = new Mat();
+        Mat mask = new Mat();
+        Mat hierarchy = new Mat();
+
+        public Scalar lowerGreen = new Scalar(85, 180, 100);
+        public Scalar upperGreen = new Scalar(95, 255, 255);
+
+        private volatile int numberOfGreenObjects = 0;
+        private volatile double lastDistance = 0;
+        private volatile double lastPixelDiameter = 0;
+        private volatile Point lastCenter = new Point(-1, -1);
+        private volatile boolean isCentered = false;
+        private volatile double circularityValue = 0;
+        private volatile double lastRadius = 0;
+
+        private OpenCvWebcam externalWebcam;
+
+        private final double realDiameter = 12.70;   // cm
+        private final double focalLength = 354.3;    // berekend uit 30cm @ 150 pixels
+
+        public GreenSphereDetectionPipeline(OpenCvWebcam webcam)
+        {
+            this.externalWebcam = webcam;
+        }
+
+        public int getNumberOfGreenObjects() { return numberOfGreenObjects; }
+        public double getCircularity() { return circularityValue; }
+        public double getLastDistance() { return lastDistance; }
+        public double getLastPixelDiameter() { return lastPixelDiameter; }
+        public boolean isBallCentered() { return isCentered; }
+        public Point getLastCenter() { return lastCenter; }
+        public double getLastRadius() { return lastRadius; }
+
+        @Override
+        public Mat processFrame(Mat input)
+        {
+            Imgproc.cvtColor(input, hsv, Imgproc.COLOR_RGB2HSV);
+            Core.inRange(hsv, lowerGreen, upperGreen, mask);
+
+            // 🔧 Sterkere morfologische filtering om gaten te dichten
+            Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(15, 15)));
+            Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_OPEN,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
+
+            List<MatOfPoint> contours = new ArrayList<>();
+            Imgproc.findContours(mask, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+
+            numberOfGreenObjects = 0;
+            lastCenter = new Point(-1, -1);
+            lastRadius = 0;
+            lastPixelDiameter = 0;
+
+            if (!contours.isEmpty())
+            {
+                // 🔧 Merge alle contouren in één grote contour
+                List<Point> allPoints = new ArrayList<>();
+                for (MatOfPoint contour : contours) {
+                    allPoints.addAll(contour.toList());
+                    contour.release();
+                }
+
+                MatOfPoint2f mergedContour = new MatOfPoint2f();
+                mergedContour.fromList(allPoints);
+
+                // MinEnclosingCircle over alle punten samen
                 Point center = new Point();
                 float[] radius = new float[1];
-                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
-                Imgproc.minEnclosingCircle(contour2f, center, radius);
+                Imgproc.minEnclosingCircle(mergedContour, center, radius);
 
                 double pixelRadius = radius[0];
                 double pixelDiameter = 2 * pixelRadius;
-
-                // sla pixelDiameter op
                 lastPixelDiameter = pixelDiameter;
-//
-//                double[] hsvValues = hsv.get((int)center.y, (int)center.x);
-//                if (hsvValues != null) {
-//                    telemetry.addData("HSV at contour center",
-//                            String.format("H: %.0f, S: %.0f, V: %.0f", hsvValues[0], hsvValues[1], hsvValues[2]));
-//                }
 
-                // afstand berekenen
+                // Afstand berekenen
                 double distance = (realDiameter * focalLength) / pixelDiameter;
 
-                if (pixelRadius > maxRadius) {
-                    maxRadius = pixelRadius;
-                    lastDistance = distance;
-                    lastRadius = pixelRadius;
-                    bestCenter = center;
-                }
+                lastDistance = distance;
+                lastRadius = pixelRadius;
+                lastCenter = center;
 
+                // Tekenen
                 Imgproc.circle(input, center, (int) pixelRadius, new Scalar(0, 255, 0), 2);
                 Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
 
-                numberOfGreenObjects++;
-                contour2f.release();
+                numberOfGreenObjects = 1; // altijd 1 bal na merge
+
+                mergedContour.release();
             }
-            contour.release();
+
+            // Center check
+            if (lastCenter.x > 0 && lastCenter.y > 0) {
+                double centerX = CAMERA_WIDTH / 2.0;
+                double centerY = CAMERA_HEIGHT / 2.0;
+
+                isCentered = Math.abs(lastCenter.x - centerX) <= CENTER_TOLERANCE &&
+                        Math.abs(lastCenter.y - centerY) <= CENTER_TOLERANCE;
+
+                Imgproc.rectangle(input,
+                        new Point(centerX - CENTER_TOLERANCE, centerY - CENTER_TOLERANCE),
+                        new Point(centerX + CENTER_TOLERANCE, centerY + CENTER_TOLERANCE),
+                        new Scalar(255, 0, 0), 2);
+            } else {
+                isCentered = false;
+            }
+
+            hsv.release();
+            mask.release();
+            hierarchy.release();
+
+            return input;
         }
 
-        lastCenter = bestCenter;
-
-        if (bestCenter.x > 0 && bestCenter.y > 0) {
-            double centerX = CAMERA_WIDTH / 2.0;
-            double centerY = CAMERA_HEIGHT / 2.0;
-
-            isCentered = Math.abs(bestCenter.x - centerX) <= CENTER_TOLERANCE &&
-                    Math.abs(bestCenter.y - centerY) <= CENTER_TOLERANCE;
-
-            Imgproc.rectangle(input,
-                    new Point(centerX - CENTER_TOLERANCE, centerY - CENTER_TOLERANCE),
-                    new Point(centerX + CENTER_TOLERANCE, centerY + CENTER_TOLERANCE),
-                    new Scalar(255, 0, 0), 2);
-        } else {
-            isCentered = false;
-        }
-
-        hsv.release();
-        mask.release();
-        hierarchy.release();
-
-        return input;
-    }
-
-    @Override
-    public void onViewportTapped()
-    {
-        viewPortPaused = !viewPortPaused;
-        if(viewPortPaused)
+        @Override
+        public void onViewportTapped()
         {
-            externalWebcam.pauseViewport();
-        }
-        else
-        {
-            externalWebcam.resumeViewport();
+            viewPortPaused = !viewPortPaused;
+            if(viewPortPaused)
+            {
+                externalWebcam.pauseViewport();
+            }
+            else
+            {
+                externalWebcam.resumeViewport();
+            }
         }
     }
-}
 }
