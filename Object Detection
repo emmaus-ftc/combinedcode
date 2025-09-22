@@ -91,23 +91,18 @@ public class ObjectDetection extends LinearOpMode
             telemetry.addData("Overhead time ms", webcam.getOverheadTimeMs());
             telemetry.addData("Theoretical max FPS", webcam.getCurrentPipelineMaxFps());
 
-            telemetry.addData("Afstand tot bal (cm)", String.format("%.2f", colorDetectionPipeline.getLastDistance()));
+            // === Telemetry voor groene ballen ===
             telemetry.addData("Aantal groene objecten", colorDetectionPipeline.getNumberOfGreenObjects());
-            telemetry.addData("Gemeten pixelDiameter", String.format("%.2f", colorDetectionPipeline.getLastPixelDiameter()));
-            telemetry.addData("Circularity", String.format("%.2f", colorDetectionPipeline.getCircularity()));
+            telemetry.addData("Afstand tot groene bal (cm)", String.format("%.2f", colorDetectionPipeline.getLastDistanceGreen()));
+            telemetry.addData("Gemeten pixelDiameter (groen)", String.format("%.2f", colorDetectionPipeline.getLastPixelDiameterGreen()));
+            telemetry.addData("Positie van groene bal", colorDetectionPipeline.getGreenBallPosition());
 
-            String positie = "Geen bal gedetecteerd";
-            if (colorDetectionPipeline.getNumberOfGreenObjects() > 0) {
-                if (colorDetectionPipeline.isBallCentered()) {
-                    positie = "BAL IN MIDDEN";
-                } else if (colorDetectionPipeline.getLastCenter().x < 160) {
-                    positie = "BAL LINKS";
-                } else {
-                    positie = "BAL RECHTS";
-                }
-            }
+            // === Telemetry voor paarse ballen ===
+            telemetry.addData("Aantal paarse objecten", colorDetectionPipeline.getNumberOfPurpleObjects());
+            telemetry.addData("Afstand tot paarse bal (cm)", String.format("%.2f", colorDetectionPipeline.getLastDistancePurple()));
+            telemetry.addData("Gemeten pixelDiameter (paars)", String.format("%.2f", colorDetectionPipeline.getLastPixelDiameterPurple()));
+            telemetry.addData("Positie van paarse bal", colorDetectionPipeline.getPurpleBallPosition());
 
-            telemetry.addData("Positie van bal", positie);
             telemetry.update();
 
             if(gamepad1.a)
@@ -131,114 +126,140 @@ public class ObjectDetection extends LinearOpMode
         private static final int CENTER_TOLERANCE = 20;
 
         Mat hsv = new Mat();
-        Mat mask = new Mat();
         Mat hierarchy = new Mat();
 
         public Scalar lowerGreen = new Scalar(85, 180, 100);
         public Scalar upperGreen = new Scalar(95, 255, 255);
 
+        public Scalar lowerColor = new Scalar(133, 90, 0);   // paars
+        public Scalar upperColor = new Scalar(145, 255, 255);
+
+        // Groene data
         private volatile int numberOfGreenObjects = 0;
-        private volatile double lastDistance = 0;
-        private volatile double lastPixelDiameter = 0;
-        private volatile Point lastCenter = new Point(-1, -1);
-        private volatile boolean isCentered = false;
-        private volatile double circularityValue = 0;
-        private volatile double lastRadius = 0;
+        private volatile double lastDistanceGreen = 0;
+        private volatile double lastPixelDiameterGreen = 0;
+        private volatile Point lastCenterGreen = new Point(-1, -1);
+
+        // Paarse data
+        private volatile int numberOfPurpleObjects = 0;
+        private volatile double lastDistancePurple = 0;
+        private volatile double lastPixelDiameterPurple = 0;
+        private volatile Point lastCenterPurple = new Point(-1, -1);
 
         private OpenCvWebcam externalWebcam;
 
         private final double realDiameter = 12.70;   // cm
-        private final double focalLength = 354.3;    // berekend uit 30cm @ 150 pixels
+        private final double focalLength = 301.00;   // berekend uit 30cm @ 150 pixels
 
         public GreenSphereDetectionPipeline(OpenCvWebcam webcam)
         {
             this.externalWebcam = webcam;
         }
 
+        // Getters voor groene ballen
         public int getNumberOfGreenObjects() { return numberOfGreenObjects; }
-        public double getCircularity() { return circularityValue; }
-        public double getLastDistance() { return lastDistance; }
-        public double getLastPixelDiameter() { return lastPixelDiameter; }
-        public boolean isBallCentered() { return isCentered; }
-        public Point getLastCenter() { return lastCenter; }
-        public double getLastRadius() { return lastRadius; }
+        public double getLastDistanceGreen() { return lastDistanceGreen; }
+        public double getLastPixelDiameterGreen() { return lastPixelDiameterGreen; }
+        public String getGreenBallPosition() {
+            if (numberOfGreenObjects == 0) return "Geen bal gedetecteerd";
+            if (Math.abs(lastCenterGreen.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
+            return lastCenterGreen.x < CAMERA_WIDTH/2.0 ? "BAL LINKS" : "BAL RECHTS";
+        }
+
+        // Getters voor paarse ballen
+        public int getNumberOfPurpleObjects() { return numberOfPurpleObjects; }
+        public double getLastDistancePurple() { return lastDistancePurple; }
+        public double getLastPixelDiameterPurple() { return lastPixelDiameterPurple; }
+        public String getPurpleBallPosition() {
+            if (numberOfPurpleObjects == 0) return "Geen bal gedetecteerd";
+            if (Math.abs(lastCenterPurple.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
+            return lastCenterPurple.x < CAMERA_WIDTH/2.0 ? "BAL LINKS" : "BAL RECHTS";
+        }
 
         @Override
         public Mat processFrame(Mat input)
         {
             Imgproc.cvtColor(input, hsv, Imgproc.COLOR_RGB2HSV);
-            Core.inRange(hsv, lowerGreen, upperGreen, mask);
 
-            // 🔧 Sterkere morfologische filtering om gaten te dichten
-            Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE,
-                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(15, 15)));
-            Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_OPEN,
-                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
+            // Groen masker
+            Mat greenMask = new Mat();
+            Core.inRange(hsv, lowerGreen, upperGreen, greenMask);
+            Imgproc.morphologyEx(greenMask, greenMask, Imgproc.MORPH_CLOSE,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(20, 20)));
+            Imgproc.morphologyEx(greenMask, greenMask, Imgproc.MORPH_OPEN,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(6, 6)));
 
-            List<MatOfPoint> contours = new ArrayList<>();
-            Imgproc.findContours(mask, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            // Paars masker
+            Mat purpleMask = new Mat();
+            Core.inRange(hsv, lowerColor, upperColor, purpleMask);
+            Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_CLOSE,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(20, 20)));
+            Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_OPEN,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(6, 6)));
 
+            // === Groene ballen detecteren ===
             numberOfGreenObjects = 0;
-            lastCenter = new Point(-1, -1);
-            lastRadius = 0;
-            lastPixelDiameter = 0;
+            lastCenterGreen = new Point(-1, -1);
+            List<MatOfPoint> greenContours = new ArrayList<>();
+            Imgproc.findContours(greenMask, greenContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-            if (!contours.isEmpty())
-            {
-                // 🔧 Merge alle contouren in één grote contour
-                List<Point> allPoints = new ArrayList<>();
-                for (MatOfPoint contour : contours) {
-                    allPoints.addAll(contour.toList());
-                    contour.release();
-                }
+            for (MatOfPoint contour : greenContours) {
+                double area = Imgproc.contourArea(contour);
+                if (area < 20) continue;
 
-                MatOfPoint2f mergedContour = new MatOfPoint2f();
-                mergedContour.fromList(allPoints);
-
-                // MinEnclosingCircle over alle punten samen
+                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
                 Point center = new Point();
                 float[] radius = new float[1];
-                Imgproc.minEnclosingCircle(mergedContour, center, radius);
+                Imgproc.minEnclosingCircle(contour2f, center, radius);
 
-                double pixelRadius = radius[0];
-                double pixelDiameter = 2 * pixelRadius;
-                lastPixelDiameter = pixelDiameter;
+                if (radius[0] > 2) {
+                    double pixelDiameter = 2 * radius[0];
+                    double distance = (realDiameter * focalLength) / pixelDiameter;
 
-                // Afstand berekenen
-                double distance = (realDiameter * focalLength) / pixelDiameter;
+                    lastPixelDiameterGreen = pixelDiameter;
+                    lastDistanceGreen = distance;
+                    lastCenterGreen = center;
 
-                lastDistance = distance;
-                lastRadius = pixelRadius;
-                lastCenter = center;
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(0, 255, 0), 2);
+                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
 
-                // Tekenen
-                Imgproc.circle(input, center, (int) pixelRadius, new Scalar(0, 255, 0), 2);
-                Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
-
-                numberOfGreenObjects = 1; // altijd 1 bal na merge
-
-                mergedContour.release();
+                    numberOfGreenObjects++;
+                }
             }
 
-            // Center check
-            if (lastCenter.x > 0 && lastCenter.y > 0) {
-                double centerX = CAMERA_WIDTH / 2.0;
-                double centerY = CAMERA_HEIGHT / 2.0;
+            // === Paarse ballen detecteren ===
+            numberOfPurpleObjects = 0;
+            lastCenterPurple = new Point(-1, -1);
+            List<MatOfPoint> purpleContours = new ArrayList<>();
+            Imgproc.findContours(purpleMask, purpleContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-                isCentered = Math.abs(lastCenter.x - centerX) <= CENTER_TOLERANCE &&
-                        Math.abs(lastCenter.y - centerY) <= CENTER_TOLERANCE;
+            for (MatOfPoint contour : purpleContours) {
+                double area = Imgproc.contourArea(contour);
+                if (area < 20) continue;
 
-                Imgproc.rectangle(input,
-                        new Point(centerX - CENTER_TOLERANCE, centerY - CENTER_TOLERANCE),
-                        new Point(centerX + CENTER_TOLERANCE, centerY + CENTER_TOLERANCE),
-                        new Scalar(255, 0, 0), 2);
-            } else {
-                isCentered = false;
+                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
+                Point center = new Point();
+                float[] radius = new float[1];
+                Imgproc.minEnclosingCircle(contour2f, center, radius);
+
+                if (radius[0] > 2) {
+                    double pixelDiameter = 2 * radius[0];
+                    double distance = (realDiameter * focalLength) / pixelDiameter;
+
+                    lastPixelDiameterPurple = pixelDiameter;
+                    lastDistancePurple = distance;
+                    lastCenterPurple = center;
+
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(255, 0, 255), 2);
+                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
+
+                    numberOfPurpleObjects++;
+                }
             }
 
-            hsv.release();
-            mask.release();
-            hierarchy.release();
+            // Opruimen
+            greenMask.release();
+            purpleMask.release();
 
             return input;
         }
