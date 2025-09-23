@@ -1,0 +1,296 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+
+import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.MatOfPoint2f;
+import org.opencv.core.Point;
+import org.opencv.core.Scalar;
+import org.opencv.core.Size;
+import org.opencv.imgproc.Imgproc;
+import org.openftc.easyopencv.OpenCvCamera;
+import org.openftc.easyopencv.OpenCvCameraFactory;
+import org.openftc.easyopencv.OpenCvCameraRotation;
+import org.openftc.easyopencv.OpenCvPipeline;
+import org.openftc.easyopencv.OpenCvWebcam;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@TeleOp(name="Object Detection", group="Robot")
+public class ObjectDetection extends LinearOpMode
+{
+    OpenCvWebcam webcam;
+
+    private DcMotor LF = null;
+    private DcMotor LB = null;
+    private DcMotor RF = null;
+    private DcMotor RB = null;
+
+    @Override
+    public void runOpMode()
+    {
+        // Hardware mapping voor de motoren (optioneel, als je ook wilt rijden)
+        LF = hardwareMap.get(DcMotor.class, "LF");
+        LB = hardwareMap.get(DcMotor.class, "LB");
+        RF = hardwareMap.get(DcMotor.class, "RF");
+        RB = hardwareMap.get(DcMotor.class, "RB");
+
+        LF.setDirection(DcMotor.Direction.REVERSE);
+        LB.setDirection(DcMotor.Direction.FORWARD);
+        RF.setDirection(DcMotor.Direction.REVERSE);
+        RB.setDirection(DcMotor.Direction.FORWARD);
+
+        LF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        LB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        RF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        RB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
+                "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
+
+        webcam = OpenCvCameraFactory.getInstance().createWebcam(
+                hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
+
+        ballDetectionPipeLine colorDetectionPipeline = new ballDetectionPipeLine(webcam);
+        webcam.setPipeline(colorDetectionPipeline);
+        webcam.setMillisecondsPermissionTimeout(5000);
+
+        webcam.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener()
+        {
+            @Override
+            public void onOpened()
+            {
+                webcam.startStreaming(320, 240, OpenCvCameraRotation.UPRIGHT);
+                telemetry.addData("Camera Status", "Stream gestart");
+                telemetry.update();
+            }
+
+            @Override
+            public void onError(int errorCode)
+            {
+                telemetry.addData("Camera Fout", "Code: " + errorCode);
+                telemetry.update();
+            }
+        });
+
+        telemetry.addLine("Waiting for start");
+        telemetry.update();
+
+        waitForStart();
+
+        while (opModeIsActive())
+        {
+            double purpleDist = colorDetectionPipeline.getLastDistancePurple();
+            double greenDist = colorDetectionPipeline.getLastDistanceGreen();
+            String purplePos = colorDetectionPipeline.getPurpleBallPosition();
+            String greenPos = colorDetectionPipeline.getGreenBallPosition();
+
+            // Stop volledig als een van de ballen te dichtbij is (<20cm)
+            if ((purpleDist > 0 && purpleDist < 20) || (greenDist > 0 && greenDist < 20)) {
+                stopDriving();
+            }
+            // Bepaal welke bal dichterbij is en richt robot
+            else if (purpleDist > 0 && (purpleDist < greenDist || greenDist == 0)) {
+                if (purplePos.equals("BAL RECHTS")) turnRight(0.05);
+                else if (purplePos.equals("BAL LINKS")) turnLeft(0.05);
+                else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.5);
+                else stopDriving();
+            } else if (greenDist > 0) {
+                if (greenPos.equals("BAL RECHTS")) turnRight(0.05);
+                else if (greenPos.equals("BAL LINKS")) turnLeft(0.05);
+                else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.5);
+                else stopDriving();
+            } else {
+                stopDriving();
+            }
+
+            // Telemetry
+            telemetry.addData("Frame Count", webcam.getFrameCount());
+            telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
+            telemetry.addData("Aantal groene objecten", colorDetectionPipeline.getNumberOfGreenObjects());
+            telemetry.addData("Afstand tot groene bal (cm)", String.format("%.2f", greenDist));
+            telemetry.addData("Positie van groene bal", greenPos);
+            telemetry.addData("Aantal paarse objecten", colorDetectionPipeline.getNumberOfPurpleObjects());
+            telemetry.addData("Afstand tot paarse bal (cm)", String.format("%.2f", purpleDist));
+            telemetry.addData("Positie van paarse bal", purplePos);
+            telemetry.update();
+
+            sleep(50);
+        }
+
+        webcam.stopStreaming();
+        webcam.closeCameraDevice();
+    }
+
+    // Motor helpers
+    private void driveForward(double power) {
+        LF.setPower(power);
+        LB.setPower(power);
+        RF.setPower(power);
+        RB.setPower(power);
+    }
+
+    private void turnLeft(double power) {
+        LF.setPower(-power);
+        LB.setPower(-power);
+        RF.setPower(power);
+        RB.setPower(power);
+    }
+
+    private void turnRight(double power) {
+        LF.setPower(power);
+        LB.setPower(power);
+        RF.setPower(-power);
+        RB.setPower(-power);
+    }
+
+    private void stopDriving() {
+        LF.setPower(0);
+        LB.setPower(0);
+        RF.setPower(0);
+        RB.setPower(0);
+    }
+
+    // Ball detection pipeline
+    class ballDetectionPipeLine extends OpenCvPipeline
+    {
+        boolean viewPortPaused;
+
+        private static final int CAMERA_WIDTH = 320;
+        private static final int CAMERA_HEIGHT = 240;
+        private static final int CENTER_TOLERANCE = 40;
+
+        Mat hsv = new Mat();
+        Mat hierarchy = new Mat();
+
+        public Scalar lowerGreen = new Scalar(85, 180, 100);
+        public Scalar upperGreen = new Scalar(95, 255, 255);
+
+        public Scalar lowerColor = new Scalar(133, 90, 0);   // paars
+        public Scalar upperColor = new Scalar(145, 255, 255);
+
+        // Groene data
+        private volatile int numberOfGreenObjects = 0;
+        private volatile double lastDistanceGreen = 0;
+        private volatile double lastPixelDiameterGreen = 0;
+        private volatile Point lastCenterGreen = new Point(-1, -1);
+
+        // Paarse data
+        private volatile int numberOfPurpleObjects = 0;
+        private volatile double lastDistancePurple = 0;
+        private volatile double lastPixelDiameterPurple = 0;
+        private volatile Point lastCenterPurple = new Point(-1, -1);
+
+        private OpenCvWebcam externalWebcam;
+        private final double realDiameter = 12.70;   // cm
+        private final double focalLength = 301.00;   // berekend uit 30cm @ 150 pixels
+
+        public ballDetectionPipeLine(OpenCvWebcam webcam) {
+            this.externalWebcam = webcam;
+        }
+
+        public int getNumberOfGreenObjects() { return numberOfGreenObjects; }
+        public double getLastDistanceGreen() { return lastDistanceGreen; }
+        public double getLastPixelDiameterGreen() { return lastPixelDiameterGreen; }
+        public String getGreenBallPosition() {
+            if (numberOfGreenObjects == 0) return "Geen bal gedetecteerd";
+            if (Math.abs(lastCenterGreen.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
+            return lastCenterGreen.x < CAMERA_WIDTH/2.0 ? "BAL LINKS" : "BAL RECHTS";
+        }
+
+        public int getNumberOfPurpleObjects() { return numberOfPurpleObjects; }
+        public double getLastDistancePurple() { return lastDistancePurple; }
+        public double getLastPixelDiameterPurple() { return lastPixelDiameterPurple; }
+        public String getPurpleBallPosition() {
+            if (numberOfPurpleObjects == 0) return "Geen bal gedetecteerd";
+            if (Math.abs(lastCenterPurple.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
+            return lastCenterPurple.x < CAMERA_WIDTH/2.0 ? "BAL LINKS" : "BAL RECHTS";
+        }
+
+        @Override
+        public Mat processFrame(Mat input) {
+            Imgproc.cvtColor(input, hsv, Imgproc.COLOR_RGB2HSV);
+
+            // Groen masker
+            Mat greenMask = new Mat();
+            Core.inRange(hsv, lowerGreen, upperGreen, greenMask);
+            Imgproc.morphologyEx(greenMask, greenMask, Imgproc.MORPH_CLOSE,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(20, 20)));
+            Imgproc.morphologyEx(greenMask, greenMask, Imgproc.MORPH_OPEN,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(6, 6)));
+
+            // Paars masker
+            Mat purpleMask = new Mat();
+            Core.inRange(hsv, lowerColor, upperColor, purpleMask);
+            Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_CLOSE,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(20, 20)));
+            Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_OPEN,
+                    Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(6, 6)));
+
+            // Groene ballen detecteren
+            numberOfGreenObjects = 0;
+            lastCenterGreen = new Point(-1, -1);
+            List<MatOfPoint> greenContours = new ArrayList<>();
+            Imgproc.findContours(greenMask, greenContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint contour : greenContours) {
+                double area = Imgproc.contourArea(contour);
+                if (area < 20) continue;
+                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
+                Point center = new Point();
+                float[] radius = new float[1];
+                Imgproc.minEnclosingCircle(contour2f, center, radius);
+                if (radius[0] > 2) {
+                    double pixelDiameter = 2 * radius[0];
+                    double distance = (realDiameter * focalLength) / pixelDiameter;
+                    lastPixelDiameterGreen = pixelDiameter;
+                    lastDistanceGreen = distance;
+                    lastCenterGreen = center;
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(0, 255, 0), 2);
+                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
+                    numberOfGreenObjects++;
+                }
+            }
+
+            // Paarse ballen detecteren
+            numberOfPurpleObjects = 0;
+            lastCenterPurple = new Point(-1, -1);
+            List<MatOfPoint> purpleContours = new ArrayList<>();
+            Imgproc.findContours(purpleMask, purpleContours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint contour : purpleContours) {
+                double area = Imgproc.contourArea(contour);
+                if (area < 20) continue;
+                MatOfPoint2f contour2f = new MatOfPoint2f(contour.toArray());
+                Point center = new Point();
+                float[] radius = new float[1];
+                Imgproc.minEnclosingCircle(contour2f, center, radius);
+                if (radius[0] > 2) {
+                    double pixelDiameter = 2 * radius[0];
+                    double distance = (realDiameter * focalLength) / pixelDiameter;
+                    lastPixelDiameterPurple = pixelDiameter;
+                    lastDistancePurple = distance;
+                    lastCenterPurple = center;
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(255, 0, 255), 2);
+                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
+                    numberOfPurpleObjects++;
+                }
+            }
+
+            greenMask.release();
+            purpleMask.release();
+            return input;
+        }
+
+        @Override
+        public void onViewportTapped() {
+            viewPortPaused = !viewPortPaused;
+            if(viewPortPaused) externalWebcam.pauseViewport();
+            else externalWebcam.resumeViewport();
+        }
+    }
+}
