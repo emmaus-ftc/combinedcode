@@ -1,8 +1,9 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.opencv.core.Core;
@@ -22,10 +23,13 @@ import org.openftc.easyopencv.OpenCvWebcam;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name="Object Detection", group="Robot")
-public class ObjectDetection extends LinearOpMode
-{
+@Autonomous(name ="autonomousCamera", group = "Robot")
+public class AutonomousCamera extends LinearOpMode{
     OpenCvWebcam webcam;
+
+    boolean arrived = false;
+
+    private ElapsedTime runtime = new ElapsedTime();
 
     private DcMotor LF = null;
     private DcMotor LB = null;
@@ -35,21 +39,25 @@ public class ObjectDetection extends LinearOpMode
     @Override
     public void runOpMode()
     {
-        // Hardware mapping voor de motoren (optioneel, als je ook wilt rijden)
+        // de vier motoren
         LF = hardwareMap.get(DcMotor.class, "LF");
-        LB = hardwareMap.get(DcMotor.class, "LB");
+        LB  = hardwareMap.get(DcMotor.class, "LB");
         RF = hardwareMap.get(DcMotor.class, "RF");
         RB = hardwareMap.get(DcMotor.class, "RB");
 
+        // richtingen corrigeren
         LF.setDirection(DcMotor.Direction.REVERSE);
         LB.setDirection(DcMotor.Direction.FORWARD);
         RF.setDirection(DcMotor.Direction.REVERSE);
         RB.setDirection(DcMotor.Direction.FORWARD);
 
+        // remmen na stoppen
         LF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         LB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         RF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         RB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        //-----------------------------------------------------------//
 
         int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
                 "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
@@ -57,7 +65,7 @@ public class ObjectDetection extends LinearOpMode
         webcam = OpenCvCameraFactory.getInstance().createWebcam(
                 hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
 
-        ballDetectionPipeLine colorDetectionPipeline = new ballDetectionPipeLine(webcam);
+        AutonomousCamera.ballDetectionPipeLine colorDetectionPipeline = new AutonomousCamera.ballDetectionPipeLine(webcam);
         webcam.setPipeline(colorDetectionPipeline);
         webcam.setMillisecondsPermissionTimeout(5000);
 
@@ -86,40 +94,58 @@ public class ObjectDetection extends LinearOpMode
 
         while (opModeIsActive())
         {
-            double purpleDist = colorDetectionPipeline.getLastDistancePurple();
+            // haal laatste afstanden en posities op
             double greenDist = colorDetectionPipeline.getLastDistanceGreen();
-            String purplePos = colorDetectionPipeline.getPurpleBallPosition();
+            double purpleDist = colorDetectionPipeline.getLastDistancePurple();
             String greenPos = colorDetectionPipeline.getGreenBallPosition();
+            String purplePos = colorDetectionPipeline.getPurpleBallPosition();
 
-            // Stop volledig als een van de ballen te dichtbij is (<20cm)
-            if ((purpleDist > 0 && purpleDist < 20) || (greenDist > 0 && greenDist < 20)) {
-                stopDriving();
-            }
-            // Bepaal welke bal dichterbij is en richt robot
-            else if (purpleDist > 0 && (purpleDist < greenDist || greenDist == 0)) {
-                if (purplePos.equals("BAL RECHTS")) turnRight(0.05);
-                else if (purplePos.equals("BAL LINKS")) turnLeft(0.05);
-                else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.5);
-                else stopDriving();
-            } else if (greenDist > 0) {
-                if (greenPos.equals("BAL RECHTS")) turnRight(0.05);
-                else if (greenPos.equals("BAL LINKS")) turnLeft(0.05);
-                else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.5);
-                else stopDriving();
-            } else {
-                stopDriving();
-            }
-
-            // Telemetry
+            // telemetry
             telemetry.addData("Frame Count", webcam.getFrameCount());
             telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
-            telemetry.addData("Aantal groene objecten", colorDetectionPipeline.getNumberOfGreenObjects());
-            telemetry.addData("Afstand tot groene bal (cm)", String.format("%.2f", greenDist));
-            telemetry.addData("Positie van groene bal", greenPos);
-            telemetry.addData("Aantal paarse objecten", colorDetectionPipeline.getNumberOfPurpleObjects());
-            telemetry.addData("Afstand tot paarse bal (cm)", String.format("%.2f", purpleDist));
-            telemetry.addData("Positie van paarse bal", purplePos);
+            telemetry.addData("Groen: aantal", colorDetectionPipeline.getNumberOfGreenObjects());
+            telemetry.addData("Groen: afstand (cm)", String.format("%.2f", greenDist));
+            telemetry.addData("Groen: positie", greenPos);
+            telemetry.addData("arrived", arrived);
+
+            telemetry.addData("Paars: aantal", colorDetectionPipeline.getNumberOfPurpleObjects());
+            telemetry.addData("Paars: afstand (cm)", String.format("%.2f", purpleDist));
+            telemetry.addData("Paars: positie", purplePos);
+
             telemetry.update();
+
+            // aangepaste logica om minder te haperen
+            if (!arrived) {
+                boolean purpleSeen = purpleDist > 0;
+                boolean greenSeen = greenDist > 0;
+
+                if (purpleSeen && (purpleDist < greenDist || !greenSeen)) {
+                    // stuur naar paarse bal
+                    if (purpleDist > 15) {
+                        if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
+                        else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
+                        else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                    } else {
+                        stopDriving();
+                        arrived = true;
+                    }
+                } else if (greenSeen) {
+                    // stuur naar groene bal
+                    if (greenDist > 15) {
+                        if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
+                        else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
+                        else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                    } else {
+                        stopDriving();
+                        arrived = true;
+                    }
+                } else {
+                    // geen bal gezien → blijf stilstaan
+                    stopDriving();
+                }
+            } else {
+                stopDriving(); // aangekomen
+            }
 
             sleep(50);
         }
@@ -128,43 +154,43 @@ public class ObjectDetection extends LinearOpMode
         webcam.closeCameraDevice();
     }
 
-    // Motor helpers
+    // helper functies
     private void driveForward(double power) {
         LF.setPower(power);
         LB.setPower(power);
-        RF.setPower(power);
         RB.setPower(power);
+        RF.setPower(power);
     }
 
     private void turnLeft(double power) {
         LF.setPower(-power);
         LB.setPower(-power);
-        RF.setPower(power);
         RB.setPower(power);
+        RF.setPower(power);
     }
 
     private void turnRight(double power) {
         LF.setPower(power);
         LB.setPower(power);
-        RF.setPower(-power);
         RB.setPower(-power);
+        RF.setPower(-power);
     }
 
     private void stopDriving() {
         LF.setPower(0);
         LB.setPower(0);
-        RF.setPower(0);
         RB.setPower(0);
+        RF.setPower(0);
     }
 
-    // Ball detection pipeline
+    // ballDetectionPipeline blijft hetzelfde als voorheen
     class ballDetectionPipeLine extends OpenCvPipeline
     {
         boolean viewPortPaused;
 
         private static final int CAMERA_WIDTH = 320;
         private static final int CAMERA_HEIGHT = 240;
-        private static final int CENTER_TOLERANCE = 40;
+        private static final int CENTER_TOLERANCE = 30;
 
         Mat hsv = new Mat();
         Mat hierarchy = new Mat();
@@ -172,32 +198,32 @@ public class ObjectDetection extends LinearOpMode
         public Scalar lowerGreen = new Scalar(85, 180, 100);
         public Scalar upperGreen = new Scalar(95, 255, 255);
 
-        public Scalar lowerColor = new Scalar(133, 90, 0);   // paars
-        public Scalar upperColor = new Scalar(145, 255, 255);
+        public Scalar lowerPurple = new Scalar(133, 90, 0);
+        public Scalar upperPurple = new Scalar(145, 255, 255);
 
-        // Groene data
         private volatile int numberOfGreenObjects = 0;
         private volatile double lastDistanceGreen = 0;
         private volatile double lastPixelDiameterGreen = 0;
         private volatile Point lastCenterGreen = new Point(-1, -1);
 
-        // Paarse data
         private volatile int numberOfPurpleObjects = 0;
         private volatile double lastDistancePurple = 0;
         private volatile double lastPixelDiameterPurple = 0;
         private volatile Point lastCenterPurple = new Point(-1, -1);
 
         private OpenCvWebcam externalWebcam;
+
         private final double realDiameter = 12.70;   // cm
         private final double focalLength = 301.00;   // berekend uit 30cm @ 150 pixels
 
-        public ballDetectionPipeLine(OpenCvWebcam webcam) {
+        public ballDetectionPipeLine(OpenCvWebcam webcam)
+        {
             this.externalWebcam = webcam;
         }
 
+        // Getters
         public int getNumberOfGreenObjects() { return numberOfGreenObjects; }
         public double getLastDistanceGreen() { return lastDistanceGreen; }
-        public double getLastPixelDiameterGreen() { return lastPixelDiameterGreen; }
         public String getGreenBallPosition() {
             if (numberOfGreenObjects == 0) return "Geen bal gedetecteerd";
             if (Math.abs(lastCenterGreen.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
@@ -206,7 +232,6 @@ public class ObjectDetection extends LinearOpMode
 
         public int getNumberOfPurpleObjects() { return numberOfPurpleObjects; }
         public double getLastDistancePurple() { return lastDistancePurple; }
-        public double getLastPixelDiameterPurple() { return lastPixelDiameterPurple; }
         public String getPurpleBallPosition() {
             if (numberOfPurpleObjects == 0) return "Geen bal gedetecteerd";
             if (Math.abs(lastCenterPurple.x - CAMERA_WIDTH/2.0) <= CENTER_TOLERANCE) return "BAL IN MIDDEN";
@@ -214,7 +239,8 @@ public class ObjectDetection extends LinearOpMode
         }
 
         @Override
-        public Mat processFrame(Mat input) {
+        public Mat processFrame(Mat input)
+        {
             Imgproc.cvtColor(input, hsv, Imgproc.COLOR_RGB2HSV);
 
             // Groen masker
@@ -227,7 +253,7 @@ public class ObjectDetection extends LinearOpMode
 
             // Paars masker
             Mat purpleMask = new Mat();
-            Core.inRange(hsv, lowerColor, upperColor, purpleMask);
+            Core.inRange(hsv, lowerPurple, upperPurple, purpleMask);
             Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_CLOSE,
                     Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(20, 20)));
             Imgproc.morphologyEx(purpleMask, purpleMask, Imgproc.MORPH_OPEN,
@@ -247,13 +273,10 @@ public class ObjectDetection extends LinearOpMode
                 Imgproc.minEnclosingCircle(contour2f, center, radius);
                 if (radius[0] > 2) {
                     double pixelDiameter = 2 * radius[0];
-                    double distance = (realDiameter * focalLength) / pixelDiameter;
-                    lastPixelDiameterGreen = pixelDiameter;
-                    lastDistanceGreen = distance;
+                    lastDistanceGreen = (realDiameter * focalLength) / pixelDiameter;
                     lastCenterGreen = center;
-                    Imgproc.circle(input, center, (int) radius[0], new Scalar(0, 255, 0), 2);
-                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
                     numberOfGreenObjects++;
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(0, 255, 0), 2);
                 }
             }
 
@@ -271,23 +294,22 @@ public class ObjectDetection extends LinearOpMode
                 Imgproc.minEnclosingCircle(contour2f, center, radius);
                 if (radius[0] > 2) {
                     double pixelDiameter = 2 * radius[0];
-                    double distance = (realDiameter * focalLength) / pixelDiameter;
-                    lastPixelDiameterPurple = pixelDiameter;
-                    lastDistancePurple = distance;
+                    lastDistancePurple = (realDiameter * focalLength) / pixelDiameter;
                     lastCenterPurple = center;
-                    Imgproc.circle(input, center, (int) radius[0], new Scalar(255, 0, 255), 2);
-                    Imgproc.circle(input, center, 3, new Scalar(0, 0, 255), -1);
                     numberOfPurpleObjects++;
+                    Imgproc.circle(input, center, (int) radius[0], new Scalar(255, 0, 255), 2);
                 }
             }
 
             greenMask.release();
             purpleMask.release();
+
             return input;
         }
 
         @Override
-        public void onViewportTapped() {
+        public void onViewportTapped()
+        {
             viewPortPaused = !viewPortPaused;
             if(viewPortPaused) externalWebcam.pauseViewport();
             else externalWebcam.resumeViewport();
