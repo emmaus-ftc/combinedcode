@@ -114,27 +114,39 @@ public class AutonomousCamera extends LinearOpMode{
 
             telemetry.update();
 
-            // bepaal welke bal dichterbij is
-            if (purpleDist > 20 && (purpleDist < greenDist || greenDist == 0) && !arrived) {
-                // richt robot op paarse bal
-                if (purplePos.equals("BAL RECHTS")) turnRight(0.1);
-                else if (purplePos.equals("BAL LINKS")) turnLeft(0.1);
-                else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.5);
-                else if (purpleDist < 20 && purpleDist > 0) {stopDriving(); arrived = true;}
-                else {stopDriving();}
-            } else if (greenDist > 20 && !arrived) {
-                // richt robot op groene bal
-                if (greenPos.equals("BAL RECHTS")) turnRight(0.1);
-                else if (greenPos.equals("BAL LINKS")) turnLeft(0.1);
-                else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.5);
-                else if (greenDist < 20 && greenDist > 0) {stopDriving(); arrived = true;}
-                else {stopDriving();}
+            // aangepaste logica om minder te haperen
+            if (!arrived) {
+                boolean purpleSeen = purpleDist > 0;
+                boolean greenSeen = greenDist > 0;
+
+                if (purpleSeen && (purpleDist < greenDist || !greenSeen)) {
+                    // stuur naar paarse bal
+                    if (purpleDist > 15) {
+                        if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
+                        else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
+                        else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                    } else {
+                        stopDriving();
+                        arrived = true;
+                    }
+                } else if (greenSeen) {
+                    // stuur naar groene bal
+                    if (greenDist > 15) {
+                        if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
+                        else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
+                        else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                    } else {
+                        stopDriving();
+                        arrived = true;
+                    }
+                } else {
+                    // geen bal gezien → blijf stilstaan
+                    stopDriving();
+                }
             } else {
-                stopDriving();
+                stopDriving(); // aangekomen
             }
-            if (purpleDist < 20 || greenDist <20 ) {
-                stopDriving();
-            }
+
             sleep(50);
         }
 
