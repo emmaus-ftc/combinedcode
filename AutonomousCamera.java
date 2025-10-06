@@ -19,6 +19,7 @@ import org.openftc.easyopencv.OpenCvCameraFactory;
 import org.openftc.easyopencv.OpenCvCameraRotation;
 import org.openftc.easyopencv.OpenCvPipeline;
 import org.openftc.easyopencv.OpenCvWebcam;
+import org.openftc.apriltag.AprilTagDetection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,8 +27,14 @@ import java.util.List;
 @Autonomous(name ="autonomousCamera", group = "Robot")
 public class AutonomousCamera extends LinearOpMode{
     OpenCvWebcam webcam;
+    AprilTagDetectionPipeline aprilTagDetectionPipeline;
+    OpenCvPipeline currentPipeline;
 
     boolean arrived = false;
+
+    final int GPP = 21;
+    final int PGP = 22;
+    final int PPG = 23;
 
     private ElapsedTime runtime = new ElapsedTime();
 
@@ -35,6 +42,15 @@ public class AutonomousCamera extends LinearOpMode{
     private DcMotor LB = null;
     private DcMotor RF = null;
     private DcMotor RB = null;
+
+    double tagsize = 0.166;
+
+    double fx = 578.272;
+    double fy = 578.272;
+    double cx = 402.145;
+    double cy = 221.506;
+
+    String volgorde = "";
 
     @Override
     public void runOpMode()
@@ -65,8 +81,12 @@ public class AutonomousCamera extends LinearOpMode{
         webcam = OpenCvCameraFactory.getInstance().createWebcam(
                 hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
 
+        aprilTagDetectionPipeline = new AprilTagDetectionPipeline(tagsize, fx, fy, cx, cy);
+
         AutonomousCamera.ballDetectionPipeLine colorDetectionPipeline = new AutonomousCamera.ballDetectionPipeLine(webcam);
-        webcam.setPipeline(colorDetectionPipeline);
+
+        currentPipeline = aprilTagDetectionPipeline;
+        webcam.setPipeline(currentPipeline);
         webcam.setMillisecondsPermissionTimeout(5000);
 
         webcam.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener()
@@ -92,62 +112,89 @@ public class AutonomousCamera extends LinearOpMode{
 
         waitForStart();
 
-        while (opModeIsActive())
+        while(opModeIsActive())
         {
-            // haal laatste afstanden en posities op
-            double greenDist = colorDetectionPipeline.getLastDistanceGreen();
-            double purpleDist = colorDetectionPipeline.getLastDistancePurple();
-            String greenPos = colorDetectionPipeline.getGreenBallPosition();
-            String purplePos = colorDetectionPipeline.getPurpleBallPosition();
+            if(currentPipeline == aprilTagDetectionPipeline) {
+                ArrayList<AprilTagDetection> detections = aprilTagDetectionPipeline.getDetectionsUpdate();
 
-            // telemetry
-            telemetry.addData("Frame Count", webcam.getFrameCount());
-            telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
-            telemetry.addData("Groen: aantal", colorDetectionPipeline.getNumberOfGreenObjects());
-            telemetry.addData("Groen: afstand (cm)", String.format("%.2f", greenDist));
-            telemetry.addData("Groen: positie", greenPos);
-            telemetry.addData("arrived", arrived);
+                // telemetry
+                telemetry.addData("Frame Count", webcam.getFrameCount());
+                telemetry.addData("FPS", String.format("%.2f", webcam.getFps()));
+                telemetry.addData("huidige volgorde", volgorde);
 
-            telemetry.addData("Paars: aantal", colorDetectionPipeline.getNumberOfPurpleObjects());
-            telemetry.addData("Paars: afstand (cm)", String.format("%.2f", purpleDist));
-            telemetry.addData("Paars: positie", purplePos);
+                if (detections != null) {
+                    telemetry.addData("Aantal tags", detections.size());
+                    if (detections.size() > 0) {
+                        for (AprilTagDetection tag : detections) {
+                            if (tag.id == GPP) volgorde = "GPP";
+                            if (tag.id == PGP) volgorde = "PGP";
+                            if (tag.id == PPG) volgorde = "PPG";
+
+                            telemetry.addData("tag ID's: ", tag.id);
+                        }
+                    }
+                } else {
+                    telemetry.addData("Aantal tags", "Geen nieuwe detecties");
+                }
+            }
+
+            if(currentPipeline == colorDetectionPipeline) {
+                // haal laatste afstanden en posities op
+                double greenDist = colorDetectionPipeline.getLastDistanceGreen();
+                double purpleDist = colorDetectionPipeline.getLastDistancePurple();
+                String greenPos = colorDetectionPipeline.getGreenBallPosition();
+                String purplePos = colorDetectionPipeline.getPurpleBallPosition();
+
+                telemetry.addData("Groen: aantal", colorDetectionPipeline.getNumberOfGreenObjects());
+                telemetry.addData("Groen: afstand (cm)", String.format("%.2f", greenDist));
+                telemetry.addData("Groen: positie", greenPos);
+                telemetry.addData("arrived", arrived);
+                telemetry.addData("Paars: aantal", colorDetectionPipeline.getNumberOfPurpleObjects());
+                telemetry.addData("Paars: afstand (cm)", String.format("%.2f", purpleDist));
+                telemetry.addData("Paars: positie", purplePos);
+
+
+                // aangepaste logica om minder te haperen
+                if (!arrived) {
+                    boolean purpleSeen = purpleDist > 0;
+                    boolean greenSeen = greenDist > 0;
+
+                    if (purpleSeen && (purpleDist < greenDist || !greenSeen)) {
+                        // stuur naar paarse bal
+                        if (purpleDist > 20) {
+                            if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
+                            else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
+                            else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                        } else {
+                            stopDriving();
+                            arrived = true;
+                        }
+                    } else if (greenSeen) {
+                        // stuur naar groene bal
+                        if (greenDist > 20) {
+                            if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
+                            else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
+                            else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                        } else {
+                            stopDriving();
+                            arrived = true;
+                        }
+                    } else {
+                        // geen bal gezien → blijf stilstaan
+                        stopDriving();
+                    }
+                } else {
+                    stopDriving(); // aangekomen
+                }
+
+
+            }
+
 
             telemetry.update();
 
-            // aangepaste logica om minder te haperen
-            if (!arrived) {
-                boolean purpleSeen = purpleDist > 0;
-                boolean greenSeen = greenDist > 0;
-
-                if (purpleSeen && (purpleDist < greenDist || !greenSeen)) {
-                    // stuur naar paarse bal
-                    if (purpleDist > 15) {
-                        if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
-                        else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
-                        else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                    } else {
-                        stopDriving();
-                        arrived = true;
-                    }
-                } else if (greenSeen) {
-                    // stuur naar groene bal
-                    if (greenDist > 15) {
-                        if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
-                        else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
-                        else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                    } else {
-                        stopDriving();
-                        arrived = true;
-                    }
-                } else {
-                    // geen bal gezien → blijf stilstaan
-                    stopDriving();
-                }
-            } else {
-                stopDriving(); // aangekomen
-            }
-
             sleep(50);
+
         }
 
         webcam.stopStreaming();
