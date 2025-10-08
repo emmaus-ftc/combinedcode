@@ -31,6 +31,7 @@ public class AutonomousCamera extends LinearOpMode{
     OpenCvPipeline currentPipeline;
 
     boolean arrived = false;
+    private int amountBallsPickedUp = 0;
 
     final int GPP = 21;
     final int PGP = 22;
@@ -42,6 +43,7 @@ public class AutonomousCamera extends LinearOpMode{
     private DcMotor LB = null;
     private DcMotor RF = null;
     private DcMotor RB = null;
+    private char[] volgordeToChar;
 
     double tagsize = 0.166;
 
@@ -131,6 +133,11 @@ public class AutonomousCamera extends LinearOpMode{
                             if (tag.id == PPG) volgorde = "PPG";
 
                             telemetry.addData("tag ID's: ", tag.id);
+
+                            volgordeToChar = volgorde.toCharArray();
+                            currentPipeline = colorDetectionPipeline;
+                            webcam.setPipeline(currentPipeline);
+
                         }
                     }
                 } else {
@@ -159,35 +166,39 @@ public class AutonomousCamera extends LinearOpMode{
                     boolean purpleSeen = purpleDist > 0;
                     boolean greenSeen = greenDist > 0;
 
-                    if (purpleSeen && (purpleDist < greenDist || !greenSeen)) {
-                        // stuur naar paarse bal
-                        if (purpleDist > 20) {
-                            if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
-                            else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
-                            else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                        } else {
-                            stopDriving();
-                            arrived = true;
+                    if (volgordeToChar != null) {
+                        if (volgordeToChar[amountBallsPickedUp] == 'G') {
+                            if (greenSeen) {
+                                // naar groene bal
+                                if (greenDist > 20) {
+                                    if (greenPos.equals("BAL RECHTS")) turnRightSmoothly(0.2);
+                                    else if (greenPos.equals("BAL LINKS")) turnLeftSmoothly(0.2);
+                                    else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                                } else {
+                                    stopDriving();
+                                    arrived = true;
+                                }
+                            } else {
+                                stopDriving();
+                            }
+                        } else if (volgordeToChar[amountBallsPickedUp] == 'P') {
+                            // naar paarse bal
+                            if (purpleSeen) {
+                                // stuur naar paarse bal
+                                if (purpleDist > 20) {
+                                    if (purplePos.equals("BAL RECHTS")) turnRightSmoothly(0.2);
+                                    else if (purplePos.equals("BAL LINKS")) turnLeftSmoothly(0.2);
+                                    else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                                } else {
+                                    stopDriving();
+                                    arrived = true;
+                                }
+                            } else {
+                                stopDriving();
+                            }
                         }
-                    } else if (greenSeen) {
-                        // stuur naar groene bal
-                        if (greenDist > 20) {
-                            if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
-                            else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
-                            else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                        } else {
-                            stopDriving();
-                            arrived = true;
-                        }
-                    } else {
-                        // geen bal gezien → blijf stilstaan
-                        stopDriving();
                     }
-                } else {
-                    stopDriving(); // aangekomen
                 }
-
-
             }
 
 
@@ -228,6 +239,19 @@ public class AutonomousCamera extends LinearOpMode{
         LB.setPower(0);
         RB.setPower(0);
         RF.setPower(0);
+    }
+
+    private void turnLeftSmoothly(double power) {
+        LF.setPower(power * 0.8);
+        LB.setPower(power * 0.8);
+        RF.setPower(power);
+        RB.setPower(power);
+    }
+    private void turnRightSmoothly(double power) {
+        LF.setPower(power);
+        LB.setPower(power);
+        RF.setPower(power * 0.8);
+        RB.setPower(power * 0.8);
     }
 
     // ballDetectionPipeline blijft hetzelfde als voorheen
