@@ -171,8 +171,8 @@ public class AutonomousCamera extends LinearOpMode{
                             if (greenSeen) {
                                 // naar groene bal
                                 if (greenDist > 20) {
-                                    if (greenPos.equals("BAL RECHTS")) turnRightSmoothly(0.2);
-                                    else if (greenPos.equals("BAL LINKS")) turnLeftSmoothly(0.2);
+                                    if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
+                                    else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
                                     else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
                                 } else {
                                     stopDriving();
@@ -186,8 +186,8 @@ public class AutonomousCamera extends LinearOpMode{
                             if (purpleSeen) {
                                 // stuur naar paarse bal
                                 if (purpleDist > 20) {
-                                    if (purplePos.equals("BAL RECHTS")) turnRightSmoothly(0.2);
-                                    else if (purplePos.equals("BAL LINKS")) turnLeftSmoothly(0.2);
+                                    if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
+                                    else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
                                     else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
                                 } else {
                                     stopDriving();
@@ -239,19 +239,6 @@ public class AutonomousCamera extends LinearOpMode{
         LB.setPower(0);
         RB.setPower(0);
         RF.setPower(0);
-    }
-
-    private void turnLeftSmoothly(double power) {
-        LF.setPower(power * 0.8);
-        LB.setPower(power * 0.8);
-        RF.setPower(power);
-        RB.setPower(power);
-    }
-    private void turnRightSmoothly(double power) {
-        LF.setPower(power);
-        LB.setPower(power);
-        RF.setPower(power * 0.8);
-        RB.setPower(power * 0.8);
     }
 
     // ballDetectionPipeline blijft hetzelfde als voorheen
