@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -38,6 +39,7 @@ public class AutonomousCamera extends LinearOpMode {
     private DcMotor RB = null;
     private DcMotor Intake = null;
     private Servo CamServo = null;
+    private CRServo IntakeServo;
 
     // State
     boolean arrived = false;
@@ -49,6 +51,9 @@ public class AutonomousCamera extends LinearOpMode {
     String volgorde = "";
     private char[] volgordeToChar;
 
+    //Mode the autonomous is currently in:
+    private String Mode = "AprilTagVolgorde";
+
     // Intake lock
     private boolean intakeLockedOn = false;
 
@@ -56,7 +61,7 @@ public class AutonomousCamera extends LinearOpMode {
     private double camScanDir = 1; // +1 = naar CAM_MAX_POS, -1 = naar CAM_MIN_POS
     private boolean trackingBall = false;
     private static final double CAM_MIN_POS = 0.07; // beginpositie
-    private static final double CAM_MAX_POS = 0.40; // maximale kijk-omlaag (je gebruikte 0.4)
+    private static final double CAM_MAX_POS = 0.40; // maximale kijk-omlaag
 
     private static final double CAM_SCAN_SPEED = 0.02; // scan snelheid (servo stappen per loop)
     private static final double CAM_TRACK_KP = 0.08;   // smoothing / proportional factor voor servo tijdens tracking
@@ -71,12 +76,17 @@ public class AutonomousCamera extends LinearOpMode {
     private static final float MIN_RADIUS = 6.0f;         // minimale radius (pixels) voor geldige bol
     private static final double MAX_DETECTION_DISTANCE = 1000.0; // mm (of willekeurige units uit je afstandsformule) - voorkomt extreem verre blobs
 
-    // AprilTag camera intrinsics (ongewijzigd)
+    // AprilTag camera intrinsics
     double tagsize = 0.166;
     double fx = 578.272;
     double fy = 578.272;
     double cx = 402.145;
     double cy = 221.506;
+
+    //Used for Scanning for balls
+    private boolean turnedRightOnce = false;
+    //start new timer
+    ElapsedTime scanTimer = new ElapsedTime();
 
     @Override
     public void runOpMode() {
@@ -99,6 +109,7 @@ public class AutonomousCamera extends LinearOpMode {
         Intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         CamServo = hardwareMap.get(Servo.class, "camServo");
+        IntakeServo = hardwareMap.get(CRServo.class, "IntakeServo");
 
         int cameraMonitorViewId = hardwareMap.appContext
                 .getResources()
@@ -133,7 +144,7 @@ public class AutonomousCamera extends LinearOpMode {
 
         while (opModeIsActive()) {
             // ---------------- APRILTAG ----------------
-            if (currentPipeline == aprilTagDetectionPipeline) {
+            if (currentPipeline == aprilTagDetectionPipeline && Mode == "AprilTagVolgorde") {
                 ArrayList<AprilTagDetection> detections = aprilTagDetectionPipeline.getDetectionsUpdate();
                 if (detections != null && detections.size() > 0) {
                     for (AprilTagDetection tag : detections) {
@@ -143,14 +154,17 @@ public class AutonomousCamera extends LinearOpMode {
                         volgordeToChar = volgorde.toCharArray();
                         currentPipeline = colorDetectionPipeline;
                         webcam.setPipeline(currentPipeline);
+                        Mode = "BalZoeken";
                         telemetry.addData("AprilTag", "Found id=" + tag.id + " -> switching to ball pipeline");
                         telemetry.update();
                     }
+                } else {
+                    driveForward(0.2);
                 }
             }
 
             // ---------------- BALL TRACKING + CAMERA SERVO ----------------
-            if (currentPipeline instanceof ballDetectionPipeLine) {
+            if (currentPipeline instanceof ballDetectionPipeLine && Mode == "BalZoeken") {
                 ballDetectionPipeLine pipe = (ballDetectionPipeLine) currentPipeline;
 
                 double camPos = CamServo.getPosition();
@@ -167,6 +181,10 @@ public class AutonomousCamera extends LinearOpMode {
                 // updated intake lock logic
                 if (nearGreen || nearPurple) {
                     intakeLockedOn = true;
+                    driveForward(0.5);
+                    sleep(500);
+                    driveForward(0);
+                    Mode = "AprilTagPosition";
                 }
 
                 // release intake lock after not seeing any ball for some cycles
@@ -181,25 +199,20 @@ public class AutonomousCamera extends LinearOpMode {
                     }
                 }
                 Intake.setPower(intakeLockedOn ? 1.0 : 0.0);
+                IntakeServo.setPower(intakeLockedOn ? 0.5 : 0.0);
 
                 // choose which ball to track (closest)
                 double ballY = -1;
-                boolean trackGreen = false;
-                boolean trackPurple = false;
                 if (anyBallSeen) {
                     if (greenSeen && purpleSeen) {
                         if (greenDist <= purpleDist) {
-                            trackGreen = true;
                             ballY = pipe.getLastCenterGreen().y;
                         } else {
-                            trackPurple = true;
                             ballY = pipe.getLastCenterPurple().y;
                         }
                     } else if (greenSeen) {
-                        trackGreen = true;
                         ballY = pipe.getLastCenterGreen().y;
                     } else {
-                        trackPurple = true;
                         ballY = pipe.getLastCenterPurple().y;
                     }
                 }
@@ -207,18 +220,35 @@ public class AutonomousCamera extends LinearOpMode {
                 // SCAN <-> TRACK
                 double targetPos = camPos; // used for telemetry as well
                 if (!arrived) {
-                    if (!anyBallSeen) {
+                    if (lockLostCounter >= 6) {
                         // SCAN mode: move servo slowly up/down
+
                         trackingBall = false;
-                        camPos += camScanDir * CAM_SCAN_SPEED;
-                        if (camPos > CAM_MAX_POS) {
-                            camPos = CAM_MAX_POS;
-                            camScanDir = -1;
-                        } else if (camPos < CAM_MIN_POS) {
-                            camPos = CAM_MIN_POS;
-                            camScanDir = 1;
+                        //camPos += camScanDir * CAM_SCAN_SPEED;
+                        if(!turnedRightOnce) {
+                            turnRight(0.2);
+                            sleep(800);
+                            stopDriving();
+                            turnedRightOnce = true;
+                            scanTimer.reset();
                         }
-                        targetPos = camPos;
+                        if(scanTimer.seconds() <= 5) {
+                            if (scanTimer.seconds() <= 3) {
+                                camPos = CAM_MAX_POS - 0.1;
+                                turnLeft(0.2);
+                            } else if (scanTimer.seconds() <= 6){
+                                camPos = CAM_MIN_POS + 0.1;
+                                turnRight(0.2);
+                            }else scanTimer.reset();
+                        }
+//                        if (camPos > CAM_MAX_POS) {
+//                            camPos = CAM_MAX_POS;
+//                            camScanDir = -1;
+//                        } else if (camPos < CAM_MIN_POS) {
+//                            camPos = CAM_MIN_POS;
+//                            camScanDir = 1;
+//                        }
+//                        targetPos = camPos;
                     } else {
                         // TRACK mode: map ballY to servo position with smoothing
                         trackingBall = true;
@@ -230,6 +260,14 @@ public class AutonomousCamera extends LinearOpMode {
                             // smoothing/proportional approach
                             double delta = mapped - camPos;
                             camPos += delta * CAM_TRACK_KP;
+                            targetPos = mapped;
+                        } else if(ballY < 0) {
+                            double normalizedY = ballY / (double) CAMERA_HEIGHT_PIXELS;
+                            normalizedY = Math.max(0.0, Math.min(1.0, normalizedY));
+                            double mapped = CAM_MIN_POS + normalizedY * (CAM_MAX_POS - CAM_MIN_POS);
+                            // smoothing/proportional approach
+                            double delta = mapped - camPos;
+                            camPos -= delta * CAM_TRACK_KP;
                             targetPos = mapped;
                         }
                         // ensure clamped
