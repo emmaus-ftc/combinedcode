@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -39,7 +40,10 @@ public class AutonomousCamera extends LinearOpMode {
     private DcMotor RB = null;
     private DcMotor Intake = null;
     private Servo CamServo = null;
-    private CRServo IntakeServo;
+    //private CRServo IntakeServo;
+
+    private DcMotor ShooterMotor = null;
+    private Servo ShooterServo = null;
 
     // State
     boolean arrived = false;
@@ -52,7 +56,7 @@ public class AutonomousCamera extends LinearOpMode {
     private char[] volgordeToChar;
 
     //Mode the autonomous is currently in:
-    private String Mode = "AprilTagVolgorde";
+    private String Mode = "Schieten";
 
     // Intake lock
     private boolean intakeLockedOn = false;
@@ -96,20 +100,27 @@ public class AutonomousCamera extends LinearOpMode {
         RF = hardwareMap.get(DcMotor.class, "RF");
         RB = hardwareMap.get(DcMotor.class, "RB");
         Intake = hardwareMap.get(DcMotor.class, "Intake");
+        //IntakeServo = hardwareMap.get(CRServo.class, "IntakeServo");
 
         LF.setDirection(DcMotor.Direction.REVERSE);
         LB.setDirection(DcMotor.Direction.FORWARD);
         RF.setDirection(DcMotor.Direction.REVERSE);
         RB.setDirection(DcMotor.Direction.FORWARD);
+        //IntakeServo.setDirection(DcMotor.Direction.FORWARD);
+
+        ShooterMotor = hardwareMap.get(DcMotor.class, "motorShooter");
+        ShooterServo = hardwareMap.get(Servo.class, "shooterServo");
+
+        ShooterMotor.setDirection(DcMotor.Direction.REVERSE);
 
         LF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         LB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         RF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         RB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         Intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        ShooterMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         CamServo = hardwareMap.get(Servo.class, "camServo");
-        IntakeServo = hardwareMap.get(CRServo.class, "IntakeServo");
 
         int cameraMonitorViewId = hardwareMap.appContext
                 .getResources()
@@ -123,7 +134,7 @@ public class AutonomousCamera extends LinearOpMode {
         aprilTagDetectionPipeline = new AprilTagDetectionPipeline(tagsize, fx, fy, cx, cy);
         ballDetectionPipeLine colorDetectionPipeline = new ballDetectionPipeLine(webcam);
 
-        currentPipeline = aprilTagDetectionPipeline;
+        currentPipeline = colorDetectionPipeline;
         webcam.setPipeline(currentPipeline);
         webcam.setMillisecondsPermissionTimeout(5000);
 
@@ -142,26 +153,62 @@ public class AutonomousCamera extends LinearOpMode {
         // lock lost counter
         int lockLostCounter = 0;
 
+        ShooterServo.setPosition(0.6);
+
         while (opModeIsActive()) {
-            // ---------------- APRILTAG ----------------
-            if (currentPipeline == aprilTagDetectionPipeline && Mode == "AprilTagVolgorde") {
-                ArrayList<AprilTagDetection> detections = aprilTagDetectionPipeline.getDetectionsUpdate();
-                if (detections != null && detections.size() > 0) {
-                    for (AprilTagDetection tag : detections) {
-                        if (tag.id == GPP) volgorde = "GPP";
-                        if (tag.id == PGP) volgorde = "PGP";
-                        if (tag.id == PPG) volgorde = "PPG";
-                        volgordeToChar = volgorde.toCharArray();
-                        currentPipeline = colorDetectionPipeline;
-                        webcam.setPipeline(currentPipeline);
-                        Mode = "BalZoeken";
-                        telemetry.addData("AprilTag", "Found id=" + tag.id + " -> switching to ball pipeline");
-                        telemetry.update();
-                    }
-                } else {
-                    driveForward(0.2);
-                }
+
+            // --------------- SCHIETEN ----------------
+            if(Mode == "Schieten") {
+
+                ShooterMotor.setPower(1);
+                sleep(800);
+
+                driveForward(0.5);
+                sleep(400);
+                stopDriving();
+
+                ShooterServo.setPosition(1);
+
+                sleep(500);
+                ShooterServo.setPosition(0.6);
+
+                Intake.setPower(0.5);
+                sleep(1000);
+
+                ShooterServo.setPosition(1);
+
+                sleep(500);
+                ShooterServo.setPosition(0.6);
+
+                Intake.setPower(0);
+                ShooterMotor.setPower(0);
+
+                Mode = "BalZoeken";
             }
+
+
+
+
+            // ---------------- APRILTAG ----------------
+//            if (currentPipeline == aprilTagDetectionPipeline && Mode == "AprilTagVolgorde") {
+//                ArrayList<AprilTagDetection> detections = aprilTagDetectionPipeline.getDetectionsUpdate();
+//                if (detections != null && detections.size() > 0) {
+//                    for (AprilTagDetection tag : detections) {
+//                        if (tag.id == GPP) volgorde = "GPP";
+//                        if (tag.id == PGP) volgorde = "PGP";
+//                        if (tag.id == PPG) volgorde = "PPG";
+//                        volgordeToChar = volgorde.toCharArray();
+//                        currentPipeline = colorDetectionPipeline;
+//                        webcam.setPipeline(currentPipeline);
+//                        Mode = "BalZoeken";
+//                        telemetry.addData("AprilTag", "Found id=" + tag.id + " -> switching to ball pipeline");
+//                        telemetry.update();
+//                    }
+//                } else {
+//                    turnLeft(0.1);
+//                }
+//            }
+
 
             // ---------------- BALL TRACKING + CAMERA SERVO ----------------
             if (currentPipeline instanceof ballDetectionPipeLine && Mode == "BalZoeken") {
@@ -184,7 +231,16 @@ public class AutonomousCamera extends LinearOpMode {
                     driveForward(0.5);
                     sleep(500);
                     driveForward(0);
-                    Mode = "AprilTagPosition";
+                    amountBallsPickedUp++;
+                    sleep(100);
+                }
+
+                Intake.setPower(intakeLockedOn ? 1.0 : 0.0);
+
+                if (amountBallsPickedUp < 2 && arrived) {
+                    arrived = false;
+                    lockLostCounter = 0;
+                    intakeLockedOn = false;
                 }
 
                 // release intake lock after not seeing any ball for some cycles
@@ -198,8 +254,7 @@ public class AutonomousCamera extends LinearOpMode {
                         lockLostCounter = LOCK_LOST_THRESHOLD; // clamp
                     }
                 }
-                Intake.setPower(intakeLockedOn ? 1.0 : 0.0);
-                IntakeServo.setPower(intakeLockedOn ? 0.5 : 0.0);
+                //IntakeServo.setPower(intakeLockedOn ? 0.5 : 0.0);
 
                 // choose which ball to track (closest)
                 double ballY = -1;
@@ -279,34 +334,34 @@ public class AutonomousCamera extends LinearOpMode {
 
                 // --------------- Drive logic based on volgorde ---------------
                 if (!arrived) {
-                    if (volgordeToChar != null && amountBallsPickedUp < volgordeToChar.length) {
-                        char currentTarget = volgordeToChar[amountBallsPickedUp];
-                        if (currentTarget == 'G') {
-                            if (greenSeen) {
-                                if (greenDist > 20) {
-                                    String greenPos = pipe.getGreenBallPosition();
-                                    if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
-                                    else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
-                                    else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                                } else {
-                                    stopDriving();
-                                    arrived = true;
-                                }
-                            }
-                        } else if (currentTarget == 'P') {
-                            if (purpleSeen) {
-                                if (purpleDist > 20) {
-                                    String purplePos = pipe.getPurpleBallPosition();
-                                    if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
-                                    else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
-                                    else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
-                                } else {
-                                    stopDriving();
-                                    arrived = true;
-                                }
-                            }
+                    //if (volgordeToChar != null && amountBallsPickedUp < volgordeToChar.length) {
+                    //char currentTarget = volgordeToChar[amountBallsPickedUp];
+                    //if (currentTarget == 'G') {
+
+                    //} else if (currentTarget == 'P') {
+                    if (purpleSeen) {
+                        if (purpleDist > 20) {
+                            String purplePos = pipe.getPurpleBallPosition();
+                            if (purplePos.equals("BAL RECHTS")) turnRight(0.2);
+                            else if (purplePos.equals("BAL LINKS")) turnLeft(0.2);
+                            else if (purplePos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                        } else {
+                            stopDriving();
+                            arrived = true;
                         }
                     }
+                    if (greenSeen) {
+                        if (greenDist > 20) {
+                            String greenPos = pipe.getGreenBallPosition();
+                            if (greenPos.equals("BAL RECHTS")) turnRight(0.2);
+                            else if (greenPos.equals("BAL LINKS")) turnLeft(0.2);
+                            else if (greenPos.equals("BAL IN MIDDEN")) driveForward(0.4);
+                        } else {
+                            stopDriving();
+                            arrived = true;
+                        }
+                    }
+                    //}
                 }
 
                 // telemetry - handig om tuning te doen tijdens testen
