@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -18,17 +19,21 @@ public class NewDriveCode extends LinearOpMode {
     private DcMotor RF = null;
     private DcMotor RB = null;
 
+    // Shooter & Intake
     private int intake_power = 0;
     private int shooter_power = 0;
+    private boolean XWasPressed = false;
+    private boolean XPressed = false;
+    private boolean reverseShooterOn = false;
 
-    // Mechanisms
     private DcMotor Intake = null;
     private DcMotor ShooterMotor = null;
     private Servo ShooterServo = null;
     private Servo CamServo = null;
+    //private CRServo IntakeServo;
 
-    ElapsedTime timer = new ElapsedTime();
-    boolean shooterActivated = false;
+    private ElapsedTime timer = new ElapsedTime();
+    private boolean shooterActivated = false;
 
     @Override
     public void runOpMode() {
@@ -41,17 +46,16 @@ public class NewDriveCode extends LinearOpMode {
 
         // Other mechanisms
         Intake = hardwareMap.get(DcMotor.class, "Intake");
-        ShooterMotor = hardwareMap.get(DcMotor.class, "motorShooter"); // From OpenDagShooter
-        ShooterServo = hardwareMap.get(Servo.class, "shooterServo");   // From OpenDagShooter
-        CamServo = hardwareMap.get(Servo.class, "camServo");   // From OpenDagShooter
+        ShooterMotor = hardwareMap.get(DcMotor.class, "motorShooter");
+        ShooterServo = hardwareMap.get(Servo.class, "shooterServo");
+        CamServo = hardwareMap.get(Servo.class, "camServo");
 
-        // Set directions
+
+        // Set motor directions
         LF.setDirection(DcMotor.Direction.REVERSE);
         LB.setDirection(DcMotor.Direction.FORWARD);
         RF.setDirection(DcMotor.Direction.REVERSE);
         RB.setDirection(DcMotor.Direction.FORWARD);
-        Intake.setDirection(DcMotor.Direction.REVERSE);
-        ShooterMotor.setDirection(DcMotor.Direction.REVERSE);
 
         // Motor behaviors
         LF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -59,8 +63,17 @@ public class NewDriveCode extends LinearOpMode {
         RF.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         RB.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         Intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+
+        //Initialize Motor of Shooter
+        ShooterMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        ShooterMotor.setDirection(DcMotor.Direction.REVERSE);
         ShooterMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
+        //target velocity in ticks per second
+        double TARGET_VELOCITY = 1800;
+
+        //Let Code know Initialization is ready
         telemetry.addData("Status", "Initialized");
         telemetry.update();
 
@@ -68,15 +81,15 @@ public class NewDriveCode extends LinearOpMode {
         runtime.reset();
 
         ShooterServo.setPosition(0.6);
-        CamServo.setPosition(0.6);
+        CamServo.setPosition(0.2);
 
         // Main loop
         while (opModeIsActive()) {
 
-//             ----- Drive control -----
+            // ----- Drive control -----
             double axial = -gamepad1.left_stick_y;
             double lateral = gamepad1.left_stick_x;
-            double yaw = gamepad1.right_stick_x;
+            double yaw = gamepad1.right_stick_x * 0.7;
 
             double driveSpeedMultiplier = 0.75;
             double maximizePower = gamepad1.right_bumper ? 0.25 : 1.0;
@@ -86,55 +99,63 @@ public class NewDriveCode extends LinearOpMode {
             double leftBackPower = (axial - lateral + yaw) * driveSpeedMultiplier;
             double rightBackPower = (axial + lateral - yaw) * driveSpeedMultiplier;
 
-            // Clamp power to limits
             leftFrontPower = Math.max(-maximizePower, Math.min(maximizePower, leftFrontPower));
             rightFrontPower = Math.max(-maximizePower, Math.min(maximizePower, rightFrontPower));
             leftBackPower = Math.max(-maximizePower, Math.min(maximizePower, leftBackPower));
             rightBackPower = Math.max(-maximizePower, Math.min(maximizePower, rightBackPower));
 
-            // Apply drive power
             LF.setPower(leftFrontPower);
             RF.setPower(rightFrontPower);
             LB.setPower(leftBackPower);
             RB.setPower(rightBackPower);
 
-            // ----- Intake control (gamepad2) -----
+            // ----- Intake control -----
             if (gamepad2.y) {
-                if (intake_power == 0) {
-                    intake_power = 1;
-                } else {
-                    intake_power = 0;
-                }
+                intake_power = (intake_power == 0) ? 1 : 0;
             } else if (gamepad2.dpad_left && gamepad2.dpad_right) {
-                if (intake_power == 0) {
-                    intake_power = -1;
-                } else {
-                    intake_power = 0;
+                intake_power = (intake_power == 0) ? -1 : 0;
+            }
+            Intake.setPower((double) intake_power /2);
+            //IntakeServo.setPower(intake_power);
+
+            // ----- Shooter motor toggle -----
+            XPressed = gamepad2.x;
+
+            if (XPressed && !XWasPressed) {
+                shooter_power = (shooter_power == 0) ? 1 : 0; // toggle motor
+
+                if (shooter_power == 1) {
+                    shooterActivated = true; // start servo feed timer
+                    timer.reset();
+                }
+            }
+            XWasPressed = XPressed;
+            if(gamepad2.left_trigger > 0.5) {
+                ShooterMotor.setPower(-1);
+            } else {
+                ShooterMotor.setPower(shooter_power);
+            }
+
+            if(gamepad2.right_trigger > 0.5) {
+                ShooterMotor.setPower(1);
+            } else {
+                ShooterMotor.setPower(shooter_power);
+            }
+
+            // ----- Shooter servo feed with spin-up delay -----
+            if (shooterActivated) {
+                if (timer.seconds() > 1.0 && timer.seconds() < 1.5) {
+                    // Wait 1 second for motor spin-up, then feed ball
+                    ShooterServo.setPosition(1);
+                } else if (timer.seconds() >= 1.5) {
+                    ShooterServo.setPosition(0.6);
+                    shooterActivated = false; // done feeding
                 }
             }
 
-            // ----- Shooter toggle -----
-            if (gamepad2.x && !shooterActivated) {
-                if (shooter_power == 0) {
-                    shooter_power = 1;
-                } else {
-                    shooter_power = 0;
-                }
-                shooterActivated = true;
-                timer.reset(); // start 2-second countdown
-            }
-
-            if (shooterActivated && timer.seconds() > 1.0) {
-                ShooterServo.setPosition(0.8);
-                shooterActivated = false; // prevent repeated activation
-            }
-
-            Intake.setPower(intake_power);
-            ShooterMotor.setPower(shooter_power);
-
-            // ----- Shooter control (gamepad1) -----
+            // ----- Manual servo adjustments -----
             if (gamepad2.a) {
-                ShooterServo.setPosition(0.75);
+                ShooterServo.setPosition(1);
             }
             if (gamepad2.b) {
                 ShooterServo.setPosition(0.6);
