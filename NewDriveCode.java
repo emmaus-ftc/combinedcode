@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 @TeleOp(name = "NewDriveCode")
 public class NewDriveCode extends LinearOpMode {
@@ -21,19 +22,21 @@ public class NewDriveCode extends LinearOpMode {
 
     // Shooter & Intake
     private int intake_power = 0;
-    private int shooter_power = 0;
+    //private int shooter_power = 0;
     private boolean XWasPressed = false;
     private boolean XPressed = false;
     private boolean reverseShooterOn = false;
 
     private DcMotor Intake = null;
-    private DcMotor ShooterMotor = null;
+    private DcMotorEx ShooterMotor = null;
     private Servo ShooterServo = null;
     private Servo CamServo = null;
     //private CRServo IntakeServo;
 
+    enum ShooterState { IDLE, SPINNING_UP, FEEDING }
+    ShooterState shooterState = ShooterState.IDLE;
+
     private ElapsedTime timer = new ElapsedTime();
-    private boolean shooterActivated = false;
 
     @Override
     public void runOpMode() {
@@ -46,7 +49,7 @@ public class NewDriveCode extends LinearOpMode {
 
         // Other mechanisms
         Intake = hardwareMap.get(DcMotor.class, "Intake");
-        ShooterMotor = hardwareMap.get(DcMotor.class, "motorShooter");
+        ShooterMotor = hardwareMap.get(DcMotorEx.class, "motorShooter");
         ShooterServo = hardwareMap.get(Servo.class, "shooterServo");
         CamServo = hardwareMap.get(Servo.class, "camServo");
 
@@ -66,12 +69,13 @@ public class NewDriveCode extends LinearOpMode {
 
 
         //Initialize Motor of Shooter
-        ShooterMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        ShooterMotor.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
         ShooterMotor.setDirection(DcMotor.Direction.REVERSE);
         ShooterMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        ShooterMotor.setVelocityPIDFCoefficients(60, 0, 10, 13);
 
         //target velocity in ticks per second
-        double TARGET_VELOCITY = 1800;
+        double TARGET_VELOCITY = 1900;
 
         //Let Code know Initialization is ready
         telemetry.addData("Status", "Initialized");
@@ -93,6 +97,9 @@ public class NewDriveCode extends LinearOpMode {
 
             double driveSpeedMultiplier = 0.75;
             double maximizePower = gamepad1.right_bumper ? 0.25 : 1.0;
+
+            double currentVelocity = ShooterMotor.getVelocity();
+            boolean shooterReady = Math.abs(currentVelocity - TARGET_VELOCITY) < 50;
 
             double leftFrontPower = (axial + lateral + yaw) * driveSpeedMultiplier;
             double rightFrontPower = (axial - lateral - yaw) * driveSpeedMultiplier;
@@ -122,35 +129,18 @@ public class NewDriveCode extends LinearOpMode {
             XPressed = gamepad2.x;
 
             if (XPressed && !XWasPressed) {
-                shooter_power = (shooter_power == 0) ? 1 : 0; // toggle motor
+                ShooterMotor.setVelocity(TARGET_VELOCITY);
 
-                if (shooter_power == 1) {
-                    shooterActivated = true; // start servo feed timer
-                    timer.reset();
-                }
             }
             XWasPressed = XPressed;
-            if(gamepad2.left_trigger > 0.5) {
-                ShooterMotor.setPower(-1);
-            } else {
-                ShooterMotor.setPower(shooter_power);
-            }
-
-            if(gamepad2.right_trigger > 0.5) {
-                ShooterMotor.setPower(1);
-            } else {
-                ShooterMotor.setPower(shooter_power);
-            }
 
             // ----- Shooter servo feed with spin-up delay -----
-            if (shooterActivated) {
-                if (timer.seconds() > 1.0 && timer.seconds() < 1.5) {
-                    // Wait 1 second for motor spin-up, then feed ball
-                    ShooterServo.setPosition(1);
-                } else if (timer.seconds() >= 1.5) {
-                    ShooterServo.setPosition(0.6);
-                    shooterActivated = false; // done feeding
-                }
+            if (shooterReady) {
+                ShooterServo.setPosition(1);
+                sleep(500);
+                ShooterMotor.setVelocity(0);
+            } else {
+                ShooterServo.setPosition(0.6);
             }
 
             // ----- Manual servo adjustments -----
@@ -163,6 +153,9 @@ public class NewDriveCode extends LinearOpMode {
             if (gamepad2.right_bumper) {
                 ShooterServo.setPosition(0.65);
             }
+
+
+            telemetry.addData("Shooter Velocity", currentVelocity);
         }
     }
 }
