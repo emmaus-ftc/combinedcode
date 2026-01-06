@@ -99,7 +99,7 @@ public class NewDriveCode extends LinearOpMode {
             double maximizePower = gamepad1.right_bumper ? 0.25 : 1.0;
 
             double currentVelocity = ShooterMotor.getVelocity();
-            boolean shooterReady = Math.abs(currentVelocity - TARGET_VELOCITY) < 50;
+            boolean shooterReady = Math.abs(currentVelocity - TARGET_VELOCITY) < 40;
 
             double leftFrontPower = (axial + lateral + yaw) * driveSpeedMultiplier;
             double rightFrontPower = (axial - lateral - yaw) * driveSpeedMultiplier;
@@ -119,7 +119,7 @@ public class NewDriveCode extends LinearOpMode {
             // ----- Intake control -----
             if (gamepad2.y) {
                 intake_power = (intake_power == 0) ? 1 : 0;
-            } else if (gamepad2.dpad_left && gamepad2.dpad_right) {
+            } else if (gamepad2.dpad_left) {
                 intake_power = (intake_power == 0) ? -1 : 0;
             }
             Intake.setPower((double) intake_power /2);
@@ -129,33 +129,44 @@ public class NewDriveCode extends LinearOpMode {
             XPressed = gamepad2.x;
 
             if (XPressed && !XWasPressed) {
-                ShooterMotor.setVelocity(TARGET_VELOCITY);
-
+                if (shooterState == ShooterState.IDLE) {
+                    ShooterMotor.setVelocity(TARGET_VELOCITY);
+                    shooterState = ShooterState.SPINNING_UP;
+                }
             }
             XWasPressed = XPressed;
 
             // ----- Shooter servo feed with spin-up delay -----
-            if (shooterReady) {
-                ShooterServo.setPosition(1);
-                sleep(500);
-                ShooterMotor.setVelocity(0);
-            } else {
-                ShooterServo.setPosition(0.6);
-            }
+            switch (shooterState) {
 
-            // ----- Manual servo adjustments -----
-            if (gamepad2.a) {
-                ShooterServo.setPosition(1);
-            }
-            if (gamepad2.b) {
-                ShooterServo.setPosition(0.6);
-            }
-            if (gamepad2.right_bumper) {
-                ShooterServo.setPosition(0.65);
+                case SPINNING_UP:
+                    ShooterServo.setPosition(0.6); // retracted
+                    if (shooterReady) {
+                        timer.reset();
+                        ShooterServo.setPosition(1); // push ring
+                        shooterState = ShooterState.FEEDING;
+                    }
+                    break;
+
+                case FEEDING:
+                    if (timer.milliseconds() > 250) {
+                        ShooterServo.setPosition(0.6); // retract
+                        ShooterMotor.setVelocity(0);   // STOP wheel
+                        shooterState = ShooterState.IDLE;
+                    }
+                    break;
+
+                case IDLE:
+                    // do nothing
+                    break;
             }
 
 
             telemetry.addData("Shooter Velocity", currentVelocity);
+            telemetry.addData("Shooter Ready", shooterReady);
+            telemetry.addData("State", shooterState);
+            telemetry.addData("velocity margin", currentVelocity - TARGET_VELOCITY);
+            telemetry.update();
         }
     }
 }
